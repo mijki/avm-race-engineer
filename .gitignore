@@ -1,0 +1,37 @@
+# Development environments
+.venv/
+node_modules/
+bin/
+obj/
+
+# Test output
+.pytest_cache/
+.pytest-temp/
+coverage/
+TestResults/
+
+# Frontend output
+.svelte-kit/
+build/
+dist/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+*.user
+*.suo
+
+# IDE
+.vscode/
+.idea/
+
+# Logs and recordings
+logs/
+recordings/
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
