@@ -2,7 +2,9 @@
 
 ## Purpose
 
-This document defines the planned quality model for AVM Race Engineer across F0-F12. It is a forward-looking gate plan and does not claim that the listed suites already exist.
+This document defines the quality model for AVM Race Engineer across F0-F12.
+F1 has implemented the host-side driver-client slice described below; later
+surfaces remain forward-looking until their phase starts.
 
 ## Layer Split
 
@@ -15,6 +17,13 @@ This document defines the planned quality model for AVM Race Engineer across F0-
 - Released: post-alpha release gate placeholder only; public release is explicitly out of scope through F12.
 
 ## Driver Lua
+
+F1 host evidence is available through
+`python -m unittest discover -s tests -p "test_f1_*.py" -q`. It covers the
+deterministic fixture/catalog, asset and module graph, generated package bytes,
+forbidden patterns, malformed/unavailable scenario representation, installer
+safety, and optional callback smoke. The CSP bullets remain a separate manual
+gate and are not satisfied by this host command.
 
 - Host-tested: module-level unit checks for rendering helpers, mode selection, sound mapping, acknowledgement state transitions, fallback-state selection, and deterministic bundle order.
 - Contract: shell payload fixtures, mock telemetry fixtures, mock alert fixtures, command and acknowledgement fixtures, malformed payload fixtures, unavailable-data fixtures.

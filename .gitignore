@@ -9,6 +9,8 @@ obj/
 .pytest-temp/
 coverage/
 TestResults/
+__pycache__/
+*.pyc
 
 # Frontend output
 .svelte-kit/

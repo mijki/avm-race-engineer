@@ -1,6 +1,6 @@
 # Driver Alert System
 
-Status: `Planned`
+Status: `F1 bounded alert state implemented; transport escalation remains planned`
 
 The AVM driver alert system governs what AVM PitWall may interrupt, how alerts
 stack, how they repeat, and how the engineer can trust that a driver actually
@@ -152,6 +152,12 @@ keeps publishing minor updates.
 
 ## Status Note
 
-This defines the intended driver alert contract and UX behavior only. Actual
-transport, incident grouping, sound packs, and TTS pipelines are not yet
-implemented in this repository.
+F1 implements a local bounded alert state machine for deterministic fixtures:
+priority ordering, alert identity dedupe, supersession, explicit active/
+acknowledged/expired states, idempotent acknowledgement, three-repeat maximum,
+priority-specific cadence/expiry, and four deterministic non-looping WAV tones.
+The visual banner remains authoritative when audio is unavailable or muted.
+
+F1 does not implement transport incident grouping, TTS, live command delivery,
+or production alert authority. Those remain later-phase responsibilities and
+must not be inferred from the mock scenario behavior.

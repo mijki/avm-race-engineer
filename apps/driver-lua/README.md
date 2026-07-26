@@ -1,6 +1,6 @@
 # AVM PitWall
 
-Status: `Planned`
+Status: `Host-complete; CSP runtime pending`
 
 AVM PitWall is the compact in-car CSP Lua client. It is the driver-facing AVM
 surface and therefore carries the strictest safety constraints.
@@ -16,15 +16,62 @@ surface and therefore carries the strictest safety constraints.
 - Keep a useful limited local view when the Driver Bridge or Relay Server is
   unavailable.
 
-## Proposed implementation boundary
+## F1 implementation boundary
 
-- CSP Lua app maintained as small development modules.
-- Deterministic build-time bundling into one generated CSP-compatible entry
-  file; the shipped path uses neither runtime `require` nor `dofile`.
-- CSP calls isolated behind an adapter; fuel, pace, stint, pit, and trend
-  calculations remain pure domain logic.
-- The generated bundle is validated, never hand-edited, and must pass a real
-  Assetto Corsa/CSP gate before a driver-client phase closes.
+- CSP Lua app is maintained as small source modules under `src/` and bundled in
+  an explicit dependency order from `build/module-manifest.json`.
+- The generated package contains one runtime bundle, no runtime `require` or
+  `dofile`, four deterministic WAV tones, an asset manifest, and a build hash
+  manifest. Generated files are ignored and recreated by the build.
+- CSP calls, audio, and presentation storage are isolated behind
+  `src/adapters/`; contracts, formatting, view-model reduction, alert state,
+  and layout selection remain host-testable.
+- The shell has exactly three modes: Compact Race, Expanded Race, and
+  Garage/Diagnostics. Race modes are fixed single-screen compositions with no
+  scrolling child UI.
+- F1 consumes deterministic fixtures only. It has no networking, live
+  telemetry, production weather or strategy calculation, setup application, or
+  arbitrary numeric editing.
+- The host gate is complete. A real in-game CSP callback/render gate remains
+  explicitly pending and is not represented as passed by host tests.
+
+## Build and validate
+
+From the repository root:
+
+```text
+python tools/f1_fixture_builder.py
+python tools/build_f1.py --verify-deterministic
+python -m unittest discover -s tests -p "test_f1_*.py" -q
+```
+
+The generated development package is written to
+`apps/driver-lua/dist/AVM_PitWall_F1/` and is not hand-edited. The package
+contains `manifest.ini`, `AVM_PitWall.lua`, `script.lua`, `README.md`,
+`asset-manifest.json`, `build-manifest.json`, and `assets/sounds/`.
+
+## Fixture scenarios
+
+The garage fixture catalog covers normal, fuel, pace, pit, weather provenance,
+confidence, unavailable, malformed, traffic, setup, and replan states. The
+catalog is in `fixtures/f1-scenario-catalog.json`; contract-shaped examples
+are in `fixtures/contracts/`. `MALFORMED_SNAPSHOT` is intentionally a Lua-only
+invalid envelope used to exercise the visible fallback shell.
+
+## Safe development install
+
+The installer is dry-run by default and requires an explicit Assetto Corsa
+root. It targets only `apps/lua/AVM_PitWall_F1`, never the installed V1
+`AVM_PitWall` directory:
+
+```text
+python tools/f1_installer.py --ac-root "E:\Games\Steam\steamapps\common\assettocorsa"
+python tools/f1_installer.py --ac-root "E:\Games\Steam\steamapps\common\assettocorsa" --apply
+```
+
+Use `--apply` only after reviewing the dry-run allowlist. The installer stages
+and hash-checks the package, preserves unrelated target files, and keeps a
+rollback backup outside the application target.
 
 ## Must Preserve From V1
 

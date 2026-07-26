@@ -1,6 +1,6 @@
 # Driver Client UX
 
-Status: `Planned`
+Status: `F1 shell implemented with deterministic mocks; transport behaviors remain planned`
 
 AVM PitWall is the in-car surface for AVM Race Engineer. Its UX must optimize
 for glanceability under load, deterministic alert behavior, and safe operation
@@ -264,6 +264,22 @@ recommendation.
 
 ## Status Note
 
-This document defines intended AVM PitWall behavior only. The modes, visuals,
-ack rules, TTS behavior, and offline handling are not implemented in this
-repository yet.
+F1 implements the three mode compositions, fixed race hierarchy, explicit
+unavailable/stale/unknown framing, bounded visual alert acknowledgement and
+repeat behavior, and deterministic mock scenario selection. The F1 shell has
+no TTS, networking, live telemetry, setup application, or production strategy
+calculation. Real CSP render and interaction evidence remains pending under the
+[CSP Runtime Gate](../testing/csp-runtime-gate.md).
+
+### F1 composition notes
+
+- Compact Race is purpose-built as a single screen: engineer message, fuel
+  range and pit-entry fuel, pace, tyres, pit strategy, weather provenance, and
+  connection state.
+- Expanded Race adds elapsed/remaining/target timing, a larger engineer region,
+  richer fuel/pace/tyre/pit cards, a reduced weather timeline, and health state.
+- Garage/Diagnostics exposes all 18 mock scenario IDs, presentation/audio
+  controls, source/contract/audio status, and the explicit statement that F1
+  cannot change live strategy or setup state.
+- The fallback shell keeps product identity, failure stage, and recovery copy
+  visible when a snapshot is malformed or a render stage raises an error.

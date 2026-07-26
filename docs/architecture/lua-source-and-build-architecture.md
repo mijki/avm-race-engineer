@@ -1,10 +1,11 @@
 # AVM Race Engineer Lua Source And Build Architecture
 
-Status: DRAFT
+Status: `F1 implemented; architecture retained for later runtime integration`
 
-This document proposes the F0 source-structure and build-boundary expectations
-for the `AVM PitWall` Lua surface. It does not claim a finished toolchain or
-generated artifact layout.
+This document defines the source-structure and build-boundary expectations for
+the `AVM PitWall` Lua surface. F1 implements the deterministic mock-only slice;
+later phases may add validated transport adapters without moving transport
+authority into the client.
 
 Related documents: [System Context](system-context.md),
 [Component Boundaries](component-boundaries.md),
@@ -22,6 +23,27 @@ Related documents: [System Context](system-context.md),
   constraints before distribution.
 - Keep the Lua codebase decomposed into small development modules while shipping
   one generated CSP entry artifact for runtime use.
+
+## F1 implementation notes
+
+The implementation lives in `apps/driver-lua/`. The explicit graph in
+`build/module-manifest.json` orders 20 modules from `bootstrap` through `app`;
+the bundler rejects duplicate IDs, missing dependencies, cycles, and missing
+source files. Each source module is wrapped in a deterministic lexical block,
+and `AVM_PitWall.lua` plus `script.lua` are generated outputs with source and
+package hashes recorded in `build-manifest.json`.
+
+The runtime namespace is `_G.AVM_PITWALL_F1`; the only callback global is the
+required `windowMain` entry point. Direct `ui`, `rgbm`, `vec2`, `ac`, audio, and
+storage access is confined to the adapter modules. The view model, formatter,
+alert state machine, scenario catalog, and layout calculator accept bounded
+inputs and do not perform networking or production race/weather calculations.
+
+The release package contains no source fixtures or development modules. The
+bundled asset manifest documents project ownership, licenses, dimensions,
+runtime use, and fallback behavior for code-defined icons and generated tones.
+The installer is separate from the bundler, dry-run by default, and refuses the
+V1 target.
 
 ## Proposed Logical Layers
 
@@ -144,9 +166,11 @@ stateDiagram-v2
 diagnostics, and connection state. No input failure may transition the client
 to an invisible or blank state.
 
-## Open F0 Questions
+## Remaining runtime questions
 
-- Whether packaging should produce one artifact per team configuration or a
-  single artifact with runtime configuration injection.
+- Which supported CSP release should be recorded as the F1 runtime baseline
+  after the first interactive validation run.
 - Whether CSP compatibility constraints require a stricter source-layout split
-  between rendering and local state adapters.
+  between rendering and local state adapters once live callback evidence exists.
+- Whether later package signing or deployment metadata should extend the
+  current deterministic hash manifest.

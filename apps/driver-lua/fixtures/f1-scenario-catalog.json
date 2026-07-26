@@ -1,0 +1,79 @@
+{
+  "default_scenario": "NORMAL_ON_PLAN_DRY",
+  "malformed_fixture_is_intentional": true,
+  "scenarios": [
+    {
+      "description": "Dry running, fuel on plan, no urgent instruction.",
+      "id": "NORMAL_ON_PLAN_DRY"
+    },
+    {
+      "description": "Fuel delta is negative and saving is required.",
+      "id": "FUEL_SAVE_REQUIRED"
+    },
+    {
+      "description": "Safe excess fuel supports a push recommendation.",
+      "id": "EXCESS_FUEL_PUSH"
+    },
+    {
+      "description": "Critical engineer pit call with acknowledgement required.",
+      "id": "BOX_THIS_LAP"
+    },
+    {
+      "description": "Preparation call before the pit window opens.",
+      "id": "BOX_IN_THREE_LAPS"
+    },
+    {
+      "description": "Engineer supersedes a previous pit direction.",
+      "id": "STAY_OUT"
+    },
+    {
+      "description": "Non-authoritative rain estimate with medium confidence.",
+      "id": "ESTIMATED_RAIN"
+    },
+    {
+      "description": "Authoritative controller schedule for heavy rain.",
+      "id": "SCHEDULED_HEAVY_RAIN"
+    },
+    {
+      "description": "Current conditions exist without a future claim.",
+      "id": "UNKNOWN_FUTURE_WEATHER"
+    },
+    {
+      "description": "The previous weather source is expired.",
+      "id": "STALE_WEATHER"
+    },
+    {
+      "description": "Forecast quality is explicitly low.",
+      "id": "LOW_CONFIDENCE_FORECAST"
+    },
+    {
+      "description": "No valid calculation is available.",
+      "id": "WAITING_FOR_VALID_DATA"
+    },
+    {
+      "description": "Last safe state retained while Driver Bridge is offline.",
+      "id": "BRIDGE_OFFLINE"
+    },
+    {
+      "description": "Race state remains visible while the message channel is degraded.",
+      "id": "ENGINEER_OFFLINE"
+    },
+    {
+      "description": "Intentionally incomplete input for fallback testing.",
+      "id": "MALFORMED_SNAPSHOT"
+    },
+    {
+      "description": "Faster class approaching with bounded warning.",
+      "id": "TRAFFIC_WARNING"
+    },
+    {
+      "description": "Garage-only informational setup offer.",
+      "id": "SETUP_AVAILABLE"
+    },
+    {
+      "description": "Accepted plan is no longer feasible.",
+      "id": "REPLAN_REQUIRED"
+    }
+  ],
+  "schema_version": "f1-scenario-catalog-v1"
+}

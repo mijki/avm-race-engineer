@@ -1,0 +1,83 @@
+{
+  "assumption_ids": [
+    "assumption-f1-dry"
+  ],
+  "based_on_strategy_revision": "accepted-r3",
+  "baseline_strategy_revision": "baseline-r1",
+  "calculated_at_utc": "2026-07-26T18:00:00Z",
+  "calculated_race_state_id": "state-f1-normal-001",
+  "car_id": "car-avm-demo",
+  "confidence": {
+    "overall_band": "high",
+    "overall_score": 0.92
+  },
+  "driver_id": "driver-demo",
+  "explanation_ids": [
+    "explanation-f1-fuel-001"
+  ],
+  "forecast_id": "forecast-f1-normal-001",
+  "forecast_state": {
+    "earliest_safe_pit_lap": 24,
+    "estimated_tyre_crossover_lap": null,
+    "expected_pit_release_traffic": "clear",
+    "expected_traffic_encounters": 1,
+    "expected_weather_change": "none",
+    "latest_safe_pit_lap": 26,
+    "next_stint_fuel_requirement_l": 46.0,
+    "optimal_pit_lap": 25,
+    "predicted_fuel_at_pit_entry_l": 13.9,
+    "predicted_fuel_at_stint_end_l": 3.4,
+    "predicted_stint_end_lap": 26,
+    "predicted_stint_end_time_utc": "2026-07-26T18:44:00Z",
+    "projected_pace_degradation_s_per_lap": 0.12,
+    "projected_race_completion": "on_time",
+    "projected_race_end_fuel_l": 5.2,
+    "projected_tyre_life_laps": 18.0,
+    "required_fuel_addition_l": 46.0,
+    "strategy_feasibility": "feasible",
+    "uncertainty": {
+      "fuel_at_pit_entry_l": {
+        "lower_bound": 13.4,
+        "unit": "L",
+        "upper_bound": 14.3
+      },
+      "optimal_pit_lap": {
+        "lower_bound": 24,
+        "unit": "lap",
+        "upper_bound": 26
+      }
+    }
+  },
+  "forecast_window": {
+    "horizon_minutes": 44,
+    "horizon_type": "stint"
+  },
+  "layout_id": "layout-f1-demo",
+  "model": {
+    "model_name": "f1-mock-forecast",
+    "model_version": "0.1.0"
+  },
+  "reason_codes": [],
+  "recommendation_state": {
+    "alternative_calls": [
+      "box_in_n_laps"
+    ],
+    "call_horizon_laps": null,
+    "call_horizon_minutes": null,
+    "operator_ack_required": false,
+    "primary_call": "on_plan",
+    "priority": "low",
+    "reason_codes": [],
+    "status": "advisory"
+  },
+  "sample_set": {
+    "operating_regime": "normal_green_running",
+    "sample_count": 12,
+    "sample_set_id": "samples-f1-qualifying-02"
+  },
+  "schema_version": "0.1.0",
+  "session_id": "session-f1-demo",
+  "stint_id": "stint-f1-02",
+  "strategy_id": "strategy-f1-demo",
+  "track_id": "track-f1-demo"
+}

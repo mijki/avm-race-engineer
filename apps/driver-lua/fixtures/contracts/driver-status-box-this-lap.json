@@ -1,0 +1,58 @@
+{
+  "calculated_race_state_id": "state-f1-normal-001",
+  "car_id": "car-avm-demo",
+  "confidence_badge": "high",
+  "connection_state": "live",
+  "driver_id": "driver-demo",
+  "forecast_snapshot_id": "forecast-f1-normal-001",
+  "fuel_summary": {
+    "fuel_delta_to_plan_l": 1.2,
+    "fuel_laps_remaining": 6.4,
+    "fuel_remaining_l": 18.7,
+    "next_stop_fuel_addition_l": 46.0
+  },
+  "generated_at_utc": "2026-07-26T18:00:00Z",
+  "pace_summary": {
+    "pace_delta_to_target_s_per_lap": 0.18,
+    "rolling_trend": "stable"
+  },
+  "pit_summary": {
+    "box_in_laps": null,
+    "pit_window_state": "box_now",
+    "primary_call": "box_this_lap"
+  },
+  "primary_instruction": {
+    "instruction": "box_this_lap",
+    "instruction_source": "engineer",
+    "priority": "critical",
+    "requires_acknowledgement": true
+  },
+  "reason_codes": [
+    "PIT_WINDOW_OPEN"
+  ],
+  "schema_version": "0.1.0",
+  "session_id": "session-f1-demo",
+  "snapshot_id": "driver-f1-box_this_lap",
+  "stint_summary": {
+    "current_stint_number": 2,
+    "predicted_stint_end_lap": 26,
+    "stint_progress_ratio": 0.72,
+    "total_planned_stints": 4
+  },
+  "strategy_revision": "accepted-r3",
+  "valid_until_utc": "2026-07-26T18:00:05Z",
+  "weather_forecast_id": "weather-f1-estimated-001",
+  "weather_summary": {
+    "authoritative": false,
+    "change_eta_min_lower": null,
+    "change_eta_min_upper": null,
+    "confidence_band": "high",
+    "current_track_condition": "dry",
+    "current_weather_type": "Dry",
+    "expected_tyre_crossover": null,
+    "label": "CURRENT",
+    "next_change_summary": null,
+    "source_type": "measured_current",
+    "strategy_implication": "M3 remains the correct dry compound."
+  }
+}
