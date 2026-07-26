@@ -503,7 +503,7 @@
           "freshness": "<=60000 ms",
           "MVP": false,
           "confidence": "medium",
-          "evidence": "Installed SDK ac_apps/lib.lua:5295-5304,5365-5383 documents ambient temperature and current weather fields; runtime validation remains required."
+          "evidence": "Installed SDK ac_apps/lib.lua:5295-5304,5365-5383 documents current weather fields plus filtered weatherConditions; this supports current-state observation only, not a full forecast schedule."
         }
       ]
     },
@@ -524,7 +524,7 @@
           "freshness": "<=60000 ms",
           "MVP": false,
           "confidence": "medium",
-          "evidence": "Installed SDK ac_apps/lib.lua:5365-5383 documents current rain wetness; semantics and runtime availability still need a CSP probe."
+          "evidence": "Installed SDK ac_apps/lib.lua:5302-5304,7544-7558 documents current rainIntensity, rainWetness, rainWater, and filtered track-state fields; semantics and runtime availability still need a CSP probe."
         }
       ]
     },
@@ -533,19 +533,19 @@
       "fields": [
         {
           "canonical_name": "track_grip_state",
-          "source": "CSP-specific telemetry or derived model",
-          "unit": "enum",
-          "type": "string",
+          "source": "CSP generic app roadGrip field via ac.getSim()",
+          "unit": "ratio",
+          "type": "number",
           "expected_frequency": "1 Hz",
           "local_availability": "conditional",
           "teammate_with_bridge": "available",
           "teammate_without_bridge": "unavailable",
           "opponent_availability": "shared",
-          "classification": "inferred",
+          "classification": "direct",
           "freshness": "<=60000 ms",
           "MVP": false,
-          "confidence": "low",
-          "evidence": "Grip abstractions are mod-specific and intentionally conservative."
+          "confidence": "medium",
+          "evidence": "Installed SDK ac_apps/lib.lua:5298 documents current roadGrip from 0 to 1; runtime meaning and update cadence still need a CSP probe."
         }
       ]
     },
@@ -566,7 +566,7 @@
           "freshness": "<=60000 ms",
           "MVP": false,
           "confidence": "medium",
-          "evidence": "Installed SDK ac_apps/lib.lua:5295-5304 documents current wind speed; runtime availability still needs a CSP probe."
+          "evidence": "Installed SDK ac_apps/lib.lua:5299-5301 documents current wind speed, velocity, and direction; runtime availability still needs a CSP probe."
         }
       ]
     },

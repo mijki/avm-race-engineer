@@ -8,6 +8,8 @@ This directory will hold cross-component verification for AVM Race Engineer.
 
 - Contract compatibility checks
 - V1 parity and regression fixtures
+- Forecast-engine unit, property, replay, and contract fixtures
+- Weather timeline and provenance fixtures
 - Relay and bridge integration tests
 - Engineer Console workflow and alert-state validation
 

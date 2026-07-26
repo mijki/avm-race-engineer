@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avm-race-engineer.local/contracts/calculation-explanation-v0.schema.json",
+  "title": "Calculation Explanation v0",
+  "description": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE. Explanation payload for derived values and recommendations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "explanation_id",
+    "subject_type",
+    "subject_id",
+    "calculation_key",
+    "generated_at_utc",
+    "summary",
+    "primary_reason_codes",
+    "confidence_summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$"
+    },
+    "explanation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject_type": {
+      "type": "string",
+      "enum": [
+        "calculated_race_state",
+        "forecast_snapshot",
+        "driver_status_snapshot",
+        "engineer_model_snapshot",
+        "weather_measurement",
+        "weather_forecast",
+        "weather_forecast_point"
+      ]
+    },
+    "subject_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "calculation_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "based_on_strategy_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "based_on_sample_set_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "narrative_steps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "primary_reason_codes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/reason_code"
+      },
+      "uniqueItems": true
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/assumption"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    },
+    "confidence_summary": {
+      "$ref": "#/$defs/confidence_summary"
+    },
+    "uncertainty_summary": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/uncertainty_summary"
+      }
+    },
+    "operator_notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]+$"
+    },
+    "assumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assumption_id",
+        "label",
+        "status"
+      ],
+      "properties": {
+        "assumption_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "stale",
+            "invalidated"
+          ]
+        },
+        "details": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "source_id",
+        "field_path"
+      ],
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "telemetry_envelope",
+            "weather_measurement",
+            "weather_forecast",
+            "strategy_revision",
+            "engineer_input",
+            "model_output"
+          ]
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capture_time_utc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "confidence_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_band",
+        "overall_score"
+      ],
+      "properties": {
+        "overall_band": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "blocked"
+          ]
+        },
+        "overall_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "uncertainty_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field_name",
+        "lower_bound",
+        "upper_bound",
+        "unit"
+      ],
+      "properties": {
+        "field_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lower_bound": {
+          "type": "number"
+        },
+        "upper_bound": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

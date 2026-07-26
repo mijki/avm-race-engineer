@@ -36,6 +36,7 @@ The initial driver vocabulary is deliberately short and unmistakable:
 | `TRAFFIC AHEAD` | weather or traffic |
 | `FASTER CLASS APPROACHING` | weather or traffic |
 | `RAIN EXPECTED` | weather warning; only when an authoritative scheduled or estimated source is labelled |
+| `RAIN TRENDING` | weather warning; trend only, not a scheduled promise |
 | `STRATEGY UPDATED` | strategy offer requiring review |
 | `SETUP AVAILABLE` | garage-only setup offer |
 | `ENGINEER MESSAGE` | bounded free-text message |
@@ -43,6 +44,9 @@ The initial driver vocabulary is deliberately short and unmistakable:
 `RAIN EXPECTED` must also identify whether the evidence is **Scheduled** or
 **Estimated**. A measured trend alone uses `RAIN TRENDING`, not an unqualified
 forecast claim.
+
+Future weather unknown or stale state should degrade to explicit `UNKNOWN` or
+`STALE` framing rather than reusing a prior forecast claim.
 
 ## Priority Ladder
 
@@ -120,6 +124,10 @@ the driver to memorize many tones.
 - P3 may repeat once if still unresolved and near-term
 - P4 and P5 generally should not repeat unless the underlying state worsens
 
+Weather alerts must follow the same bounded repetition rules as other alert
+families. A weather trend should not spam the driver merely because the source
+keeps publishing minor updates.
+
 ## Acknowledgement Rules
 
 - Alerts linked to an engineer command should preserve command acknowledgement
@@ -137,6 +145,8 @@ the driver to memorize many tones.
 - Stale telemetry: freeze the last alert context and mark it stale
 - Disconnected command path: raise connection-state priority high enough that
   the driver is not misled into trusting old commands as current
+- Unknown future weather: show no forecast promise; keep only current-condition
+  or caution context if that current measurement remains trustworthy
 - Local rendering error: fail safe to the smallest possible critical-safe banner
   instead of a blank surface
 

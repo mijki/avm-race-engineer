@@ -1,0 +1,427 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avm-race-engineer.local/contracts/driver-status-snapshot-v0.schema.json",
+  "title": "Driver Status Snapshot v0",
+  "description": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE. Compact driver-facing snapshot derived from full race and weather models.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "snapshot_id",
+    "session_id",
+    "car_id",
+    "driver_id",
+    "strategy_revision",
+    "calculated_race_state_id",
+    "forecast_snapshot_id",
+    "weather_forecast_id",
+    "generated_at_utc",
+    "valid_until_utc",
+    "connection_state",
+    "stint_summary",
+    "fuel_summary",
+    "pace_summary",
+    "pit_summary",
+    "weather_summary",
+    "primary_instruction",
+    "confidence_badge",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$"
+    },
+    "snapshot_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "car_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "driver_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "strategy_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "calculated_race_state_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "forecast_snapshot_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "weather_forecast_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "valid_until_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "connection_state": {
+      "type": "string",
+      "enum": [
+        "live",
+        "degraded",
+        "stale",
+        "disconnected"
+      ]
+    },
+    "stint_summary": {
+      "$ref": "#/$defs/stint_summary"
+    },
+    "fuel_summary": {
+      "$ref": "#/$defs/fuel_summary"
+    },
+    "pace_summary": {
+      "$ref": "#/$defs/pace_summary"
+    },
+    "pit_summary": {
+      "$ref": "#/$defs/pit_summary"
+    },
+    "weather_summary": {
+      "$ref": "#/$defs/weather_summary"
+    },
+    "primary_instruction": {
+      "$ref": "#/$defs/primary_instruction"
+    },
+    "confidence_badge": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "blocked"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reason_code"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]+$"
+    },
+    "stint_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "current_stint_number",
+        "stint_progress_ratio"
+      ],
+      "properties": {
+        "current_stint_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_planned_stints": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "stint_progress_ratio": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "predicted_stint_end_lap": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "fuel_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fuel_remaining_l",
+        "fuel_laps_remaining",
+        "fuel_delta_to_plan_l"
+      ],
+      "properties": {
+        "fuel_remaining_l": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "fuel_laps_remaining": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "fuel_delta_to_plan_l": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "next_stop_fuel_addition_l": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "pace_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pace_delta_to_target_s_per_lap",
+        "rolling_trend"
+      ],
+      "properties": {
+        "pace_delta_to_target_s_per_lap": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rolling_trend": {
+          "type": "string",
+          "enum": [
+            "improving",
+            "stable",
+            "worsening",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "pit_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pit_window_state",
+        "primary_call"
+      ],
+      "properties": {
+        "pit_window_state": {
+          "type": "string",
+          "enum": [
+            "closed",
+            "prepare",
+            "open",
+            "box_now",
+            "overdue",
+            "unknown"
+          ]
+        },
+        "primary_call": {
+          "type": "string",
+          "enum": [
+            "on_plan",
+            "save_fuel",
+            "push",
+            "target_pace",
+            "box_this_lap",
+            "box_in_n_laps",
+            "stay_out",
+            "extend",
+            "shorten_stint",
+            "change_tyres",
+            "double_stint_tyres",
+            "replan_required",
+            "waiting_for_valid_data",
+            "low_confidence"
+          ]
+        },
+        "box_in_laps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "weather_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "current_weather_type",
+        "current_track_condition",
+        "authoritative",
+        "confidence_band"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "enum": [
+            "CURRENT",
+            "SCHEDULED",
+            "ESTIMATED",
+            "TRENDING",
+            "UNKNOWN",
+            "STALE"
+          ]
+        },
+        "current_weather_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current_track_condition": {
+          "type": "string",
+          "enum": [
+            "dry",
+            "damp",
+            "wet",
+            "standing_water",
+            "unknown"
+          ]
+        },
+        "next_change_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change_eta_min_lower": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "change_eta_min_upper": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "authoritative": {
+          "type": "boolean"
+        },
+        "expected_tyre_crossover": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strategy_implication": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence_band": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "blocked"
+          ]
+        }
+      }
+    },
+    "primary_instruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instruction",
+        "instruction_source",
+        "priority",
+        "requires_acknowledgement"
+      ],
+      "properties": {
+        "instruction": {
+          "type": "string",
+          "enum": [
+            "none",
+            "on_plan",
+            "save_fuel",
+            "push",
+            "target_pace",
+            "box_this_lap",
+            "box_in_n_laps",
+            "stay_out",
+            "extend",
+            "shorten_stint",
+            "change_tyres",
+            "double_stint_tyres",
+            "replan_required",
+            "waiting_for_valid_data",
+            "low_confidence"
+          ]
+        },
+        "instruction_source": {
+          "type": "string",
+          "enum": [
+            "none",
+            "engineer",
+            "forecast_engine",
+            "local_safe_fallback"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "critical"
+          ]
+        },
+        "requires_acknowledgement": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

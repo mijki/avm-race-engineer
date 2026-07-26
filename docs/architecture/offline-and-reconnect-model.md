@@ -94,12 +94,20 @@ silently promoted back to `live`.
 
 - `Driver Bridge` should be the only component expected to buffer upstream
   telemetry during relay loss.
+- `Driver Bridge` should continue representative-sample management, derived
+  current-state calculation, short-horizon forecasting, and compact driver
+  snapshot publication while the relay is unavailable.
+- The bridge should retain the latest accepted strategy revision for local use
+  during outage, but proposed or superseded remote revisions should not become
+  implicitly accepted offline.
 - Commands that expire during an offline interval should remain closed and must
   not become newly driver-visible after reconnect.
 - Delayed replay should be marked as delayed until freshness returns to
   `live`.
 - Browser clients should revalidate freshness after sleep or reconnect instead
   of assuming locally cached truth is current.
+- When weather future data becomes stale or disappears, future weather should
+  degrade to unknown or low confidence rather than persisting false precision.
 
 ## Proposed Reconnect Rules
 
@@ -111,6 +119,28 @@ silently promoted back to `live`.
   a normal deduplication case, not as a unique exceptional path.
 - Acknowledgements received after a relay outage should attach to the original
   command instance when correlation is still valid.
+- Replayed calculated state should preserve the original strategy revision,
+  model version, sample-set identity, and freshness markers used at calculation
+  time.
+- The relay may optionally recompute or verify buffered bridge calculations with
+  the same shared production libraries after reconnect, but any divergence
+  should remain visible instead of silently replacing the bridge history.
+- Longer-horizon scenarios should be recalculated from the restored session
+  truth once reconnect stabilizes, not inferred from a partially replayed
+  browser cache.
+
+## Proposed Local And Remote Behavior During Outage
+
+- `AVM PitWall` should continue showing the last valid compact driver snapshot,
+  mark it stale when freshness windows are exceeded, and suppress risky
+  recommendations that can no longer be supported.
+- `Driver Bridge` should remain the local authority for the active car's
+  measured telemetry and short-horizon forecast while offline from the relay.
+- `Relay Server` should treat post-outage replay as delayed evidence, then
+  restore engineer-visible truth only after identity, ordering, and revision
+  checks pass.
+- `Engineer Console` should keep stale views visible for context, but block any
+  UI that implies fresh authoritative calculation from a disconnected browser.
 
 ## Failure Cases To Preserve
 
@@ -119,3 +149,7 @@ silently promoted back to `live`.
 - A browser tab resumes from sleep with an apparently recent but actually stale
   cache.
 - A command is dispatched near expiry while the uplink is unstable.
+- The active weather provider changes or loses future schedule visibility during
+  a session.
+- The bridge reconnects with buffered calculations tied to an older accepted
+  strategy revision.

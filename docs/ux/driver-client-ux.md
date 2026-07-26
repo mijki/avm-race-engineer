@@ -48,13 +48,39 @@ trustworthy data exists, that model contains:
 - pace against target, current-lap delta, and rolling pace trend;
 - tyre condition and trend;
 - projected pit window and target pit lap;
+- compact forecast framing for next pit and stint outcome where confidence is
+  high enough;
 - traffic warnings;
 - measured current weather and track condition;
+- weather-status provenance: current, scheduled, estimated, trending, unknown,
+  stale;
+- tyre crossover or strategy implication when it is actionable and trustworthy;
 - Engineer Console connection state;
 - current engineer instruction, priority, and acknowledgement state.
 
 Unavailable fields remain explicitly unavailable; the layout must not invent
 zeroes or silently substitute stale values.
+
+## Compact Calculation And Weather Rules
+
+The race view must reduce the model to a driver-safe summary:
+
+- current state first;
+- one next-action recommendation at most;
+- one next meaningful weather change at most;
+- concise trust framing for calculated or forecast values.
+
+Driver weather and calculation context must use explicit labels where relevant:
+
+- `CURRENT`
+- `SCHEDULED`
+- `ESTIMATED`
+- `TRENDING`
+- `UNKNOWN`
+- `STALE`
+
+The driver should not have to infer whether a value is measured, scheduled, or
+estimated from icon shape or color alone.
 
 ## Mode A: Compact Race Mode
 
@@ -67,8 +93,11 @@ Purpose: the default low-noise race layout for endurance stints.
 - Current lap or sector progress indicator
 - Stint age or laps into stint
 - Fuel remaining plus simple trend: safe, tight, critical
+- Fuel delta or pit-readiness framing only when confidence is sufficient
 - Pace delta summary: on target, slightly off, well off
 - Tyre condition summary if trustworthy enough to expose
+- Current weather plus the next meaningful change in compact form
+- Tyre crossover or strategy implication only when actionable
 - Minimal connection badge: live, degraded, stale, disconnected
 
 ### Allowed Interaction
@@ -87,6 +116,7 @@ Purpose: the default low-noise race layout for endurance stints.
 - No detailed message history
 - No scrolling telemetry tables
 - No large charts
+- No dense weather timeline or model comparison matrix
 - No low-priority setup details
 
 ## Mode B: Expanded Race Mode
@@ -102,6 +132,7 @@ information without compromising safety.
 - Pace delta with short target context
 - Tyre state split by simple front/rear or wear temperature condition
 - Weather or traffic advisory chip when relevant and fresh
+- Compact weather provenance label and simple change timing when justified
 - Most recent engineer command state and acknowledgement status
 
 ### Allowed Interaction
@@ -212,6 +243,10 @@ distance.
   risky derived recommendations
 - `Disconnected`: show persistent broken-link state and block any UI that would
   imply fresh remote control or fresh strategy truth
+
+If weather or calculated model confidence drops below the threshold for safe
+guidance, the race view should prefer `UNKNOWN`, `STALE`, or a conservative
+instruction over precise-looking tactical detail.
 
 Connection state belongs at hierarchy position 8, but stale or disconnected
 state may temporarily rise higher when it invalidates a visible command or

@@ -40,6 +40,8 @@ The first MVP must cover this exact 14-step slice:
   acknowledgement
 - Server-disconnect degradation and reconnect idempotency
 - System health and freshness visibility across the stack
+- Conservative current-versus-derived status language wherever calculated or
+  weather context is shown
 
 ## MVP Must Prove
 
@@ -48,6 +50,8 @@ The first MVP must cover this exact 14-step slice:
 - The engineer can understand what requires action now from Live Overview
 - Stale or disconnected data is visibly untrustworthy and does not masquerade as
   live control truth
+- Derived race-state or weather guidance never masquerades as authoritative raw
+  measurement
 - V1 compatibility-sensitive behavior is either preserved or explicitly called
   out as a deliberate divergence
 
@@ -57,4 +61,5 @@ The first MVP must cover this exact 14-step slice:
 - Full historical analytics suites
 - Multi-team administration depth beyond the minimum needed for safe access
 - Full forecast-grade weather intelligence
+- Full strategy-simulation workspace with alternative-plan branching
 - Setup transfer, which remains planned for F10 and must never apply silently

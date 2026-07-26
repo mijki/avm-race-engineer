@@ -30,6 +30,9 @@ Detailed responsibility boundaries live in the component READMEs:
 - [packages/telemetry-contracts/README.md](packages/telemetry-contracts/README.md)
 - [packages/command-contracts/README.md](packages/command-contracts/README.md)
 - [packages/strategy-domain/README.md](packages/strategy-domain/README.md)
+- [packages/race-domain/README.md](packages/race-domain/README.md)
+- [packages/forecast-engine/README.md](packages/forecast-engine/README.md)
+- [packages/strategy-simulation/README.md](packages/strategy-simulation/README.md)
 
 ## Product Documentation
 
@@ -37,6 +40,8 @@ Detailed responsibility boundaries live in the component READMEs:
 - [docs/product/product-scope.md](docs/product/product-scope.md)
 - [docs/product/personas-and-user-stories.md](docs/product/personas-and-user-stories.md)
 - [docs/product/mvp-definition.md](docs/product/mvp-definition.md)
+- [docs/product/calculation-and-forecast-requirements.md](docs/product/calculation-and-forecast-requirements.md)
+- [docs/product/weather-forecast-requirements.md](docs/product/weather-forecast-requirements.md)
 - [docs/product/non-goals.md](docs/product/non-goals.md)
 - [docs/product/v1-lessons.md](docs/product/v1-lessons.md)
 
@@ -51,11 +56,17 @@ Detailed responsibility boundaries live in the component READMEs:
 
 - [System context](docs/architecture/system-context.md)
 - [Component boundaries](docs/architecture/component-boundaries.md)
+- [Race model and forecast engine](docs/architecture/race-model-and-forecast-engine.md)
+- [Weather forecast architecture](docs/architecture/weather-forecast-architecture.md)
 - [Telemetry envelope draft](docs/contracts/telemetry-envelope-v0.md)
+- [Forecast snapshot draft](docs/contracts/forecast-snapshot-v0.md)
+- [Weather forecast draft](docs/contracts/weather-forecast-v0.md)
 - [Command envelope draft](docs/contracts/command-envelope-v0.md)
 - [Telemetry capability matrix](docs/research/telemetry-capability-matrix.md)
+- [Weather source capability matrix](docs/research/weather-source-capability-matrix.md)
 - [Security boundaries](docs/operations/security-boundaries.md)
 - [Testing strategy](docs/testing/testing-strategy.md)
+- [Forecast engine test strategy](docs/testing/forecast-engine-test-strategy.md)
 - [Programme roadmap](docs/phases/programme-roadmap.md)
 
 ## V1 Reference Implementation

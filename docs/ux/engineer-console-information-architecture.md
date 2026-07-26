@@ -34,8 +34,8 @@ Critical widgets:
   commands, and setup or strategy blocks that need explicit review
 - Car state strip with position, lap, gap, fuel trend, stint age, pit-window
   state, tyre summary, and connection state
-- Strategy summary card with current target, latest rationale, confidence, and
-  revision state
+- Strategy summary card with current target, latest rationale, confidence,
+  revision state, and compact baseline versus measured versus forecast delta
 - Messages and commands card with latest outbound command, command lifecycle
   state, and pending resend or supersede actions
 - Event timeline with recent incidents, pit calls, driver changes, and health
@@ -184,8 +184,12 @@ Primary user: race engineer.
 Critical widgets:
 
 - Current strategy revision and status
+- Comparison strip for baseline, measured, forecast, proposed, and accepted
+  state
 - Fuel-to-target and stint target cards
 - Pit-window recommendation with confidence and validity window
+- Forecast timeline or horizon summary with assumptions, freshness, and sample
+  quality
 - Operator override controls with audit notes
 
 Sources:
@@ -201,10 +205,13 @@ Update frequency:
 Empty state:
 
 - No active strategy revision yet
+- No active accepted strategy revision yet, or baseline only
 
 Stale state:
 
 - Mark revision stale and block silent application or promotion
+- Distinguish stale forecast from stale accepted plan; one must not silently
+  overwrite the other
 
 Error state:
 
@@ -213,6 +220,8 @@ Error state:
 MVP:
 
 - Single selected strategy revision with rationale
+- Single selected strategy revision plus compact comparison against measured and
+  baseline state
 
 Later:
 
@@ -221,47 +230,71 @@ Later:
 
 ## 5. Weather
 
-Purpose: expose current measured weather or track-condition context and its
-confidence limits.
+Purpose: expose current measured weather or track-condition context, future
+weather evidence, and confidence limits without overstating source authority.
 
 Primary user: race engineer.
 
 Critical widgets:
 
 - Current conditions card
+- Source-health and provenance card
+- Five-minute forecast timeline with explicit current, scheduled, estimated,
+  trending, unknown, and stale labels
 - Rain or track-surface caution markers if supported
-- Source confidence and sample age
-- Impact note for strategy or tyre decisions
+- Condition traces for rain intensity, air and road temperature, wetness,
+  standing water, wind, and track grip where proven
+- Drying or wetting rate and tyre-crossover estimate
+- Source confidence, uncertainty, and sample age
+- Impact note for strategy, tyre, fuel, and pit-window decisions
+- Historical measured timeline
+- Forecast-versus-actual comparison lane when history exists
 
 Sources:
 
 - CSP or external weather-capable telemetry if proven
+- Authoritative schedule sources when deliberately exposed
+- Derived trend and estimated forecast layers kept distinct
 - Manual operator annotation where necessary
 
 Update frequency:
 
-- On new weather sample arrival
+- On new weather sample arrival, meaningful source-health change, or forecast
+  recalculation
 
 Empty state:
 
-- Weather unknown or unsupported
+- Weather unknown, unsupported, or not yet available for the selected session
 
 Stale state:
 
-- Last known weather retained with explicit stale label
+- Last known weather retained with explicit stale label; stale future buckets do
+  not keep pretending to be current forecast truth
+
+Degraded state:
+
+- Current conditions may remain usable while scheduled or estimated future
+  weather degrades to unknown
+- Conflicting sources must show conflict and the affected downstream strategy
+  confidence reduction
 
 Error state:
 
-- Source contradiction or unsupported field mapping
+- Source contradiction, unsupported field mapping, or incompatible forecast
+  provenance
 
 MVP:
 
-- Conservative current-condition visibility only
+- Conservative current-condition visibility plus explicit unknown-state
+  handling
 
 Later:
 
 - Authoritative scheduled-weather integrations and clearly labelled estimates
 - Automated weather-driven recommendation hints
+- Historical forecast-versus-actual review
+- Alternative weather scenarios with pace, fuel, tyre, traffic, pit-release,
+  and pit-window effects
 
 ## 6. Messages And Commands
 

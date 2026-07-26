@@ -77,6 +77,14 @@ surfaces:
   [docs/product/personas-and-user-stories.md](docs/product/personas-and-user-stories.md)
 - MVP definition:
   [docs/product/mvp-definition.md](docs/product/mvp-definition.md)
+- Calculation and forecast requirements:
+  [docs/product/calculation-and-forecast-requirements.md](docs/product/calculation-and-forecast-requirements.md)
+- Weather forecast requirements:
+  [docs/product/weather-forecast-requirements.md](docs/product/weather-forecast-requirements.md)
+- Race model and forecast engine:
+  [docs/architecture/race-model-and-forecast-engine.md](docs/architecture/race-model-and-forecast-engine.md)
+- Weather forecast architecture:
+  [docs/architecture/weather-forecast-architecture.md](docs/architecture/weather-forecast-architecture.md)
 - Non-goals:
   [docs/product/non-goals.md](docs/product/non-goals.md)
 - V1 lessons and migration policy:

@@ -9,7 +9,9 @@ This matrix is the F0 planning baseline for exactly 35 telemetry categories. It 
 - local selected-car telemetry is preferred over relay-wide or opponent-wide promises
 - teammate coverage is materially better with an active bridge than without one
 - private opponent fuel, tyres, damage, setup, and controls remain unavailable in this draft
-- weather, wetness, grip, wind, and aero remain low-confidence or conditional until a source inventory proves them
+- weather and wetness remain conditional until runtime probes prove cadence and semantics
+- grip and wind now have documented current read surfaces, but still require runtime validation
+- aero remains low-confidence until a source inventory proves it
 
 Authoritative field detail lives in [telemetry-capability-matrix.json](./telemetry-capability-matrix.json).
 
