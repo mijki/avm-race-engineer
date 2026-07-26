@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avm-race-engineer.local/contracts/forecast-confidence-v0.schema.json",
+  "title": "Forecast Confidence v0",
+  "description": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE. Structured confidence for race and weather calculations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "confidence_id",
+    "subject_type",
+    "subject_id",
+    "calculated_at_utc",
+    "overall_band",
+    "overall_score",
+    "freshness_state",
+    "components",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$"
+    },
+    "confidence_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject_type": {
+      "type": "string",
+      "enum": [
+        "calculated_race_state",
+        "forecast_snapshot",
+        "driver_status_snapshot",
+        "engineer_model_snapshot",
+        "weather_measurement",
+        "weather_forecast",
+        "weather_forecast_point",
+        "calculation_explanation"
+      ]
+    },
+    "subject_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "calculated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "overall_band": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "blocked"
+      ]
+    },
+    "overall_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "freshness_state": {
+      "type": "string",
+      "enum": [
+        "live",
+        "degraded",
+        "stale",
+        "disconnected"
+      ]
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/confidence_component"
+      }
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reason_code"
+      },
+      "uniqueItems": true
+    },
+    "ui_summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "confidence_component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimension",
+        "score",
+        "weight",
+        "status",
+        "rationale"
+      ],
+      "properties": {
+        "dimension": {
+          "type": "string",
+          "enum": [
+            "sample_quantity",
+            "sample_age",
+            "sample_consistency",
+            "telemetry_completeness",
+            "regime_match",
+            "weather_stability",
+            "strategy_compatibility",
+            "identity_validity",
+            "forecast_horizon",
+            "source_health"
+          ]
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "warning",
+            "failing",
+            "unknown"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]+$"
+    }
+  }
+}

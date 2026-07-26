@@ -1,0 +1,345 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avm-race-engineer.local/contracts/weather-measurement-v0.schema.json",
+  "title": "Weather Measurement v0",
+  "description": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE. Measured current weather and track-condition state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "measurement_id",
+    "session_id",
+    "car_id",
+    "track_id",
+    "layout_id",
+    "capture_time_utc",
+    "capture_time_monotonic_ms",
+    "sequence",
+    "source_attribution",
+    "freshness",
+    "conditions",
+    "confidence",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$"
+    },
+    "measurement_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "car_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "track_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "layout_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "capture_time_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "capture_time_monotonic_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sequence": {
+      "$ref": "#/$defs/sequence"
+    },
+    "source_attribution": {
+      "$ref": "#/$defs/source_attribution"
+    },
+    "freshness": {
+      "$ref": "#/$defs/freshness"
+    },
+    "conditions": {
+      "$ref": "#/$defs/conditions"
+    },
+    "current_to_next_transition": {
+      "$ref": "#/$defs/transition"
+    },
+    "confidence": {
+      "$ref": "#/$defs/confidence_summary"
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reason_code"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]+$"
+    },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stream_id",
+        "sequence_number"
+      ],
+      "properties": {
+        "stream_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sequence_number": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "source_attribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "source_type",
+        "origin",
+        "source_id"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "shared_memory",
+            "csp_app",
+            "weatherfx_controller",
+            "relay_server",
+            "manual"
+          ]
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "measured",
+            "replayed",
+            "recovered",
+            "manual"
+          ]
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "age_ms"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "live",
+            "degraded",
+            "stale",
+            "disconnected"
+          ]
+        },
+        "age_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "valid_until_utc": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "weather_type",
+        "precipitation_type",
+        "ambient_temperature_c",
+        "road_temperature_c",
+        "rain_intensity_0_to_1",
+        "track_wetness_0_to_1",
+        "standing_water_0_to_1",
+        "wind_speed_mps",
+        "wind_direction_degrees"
+      ],
+      "properties": {
+        "weather_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "precipitation_type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "rain",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "ambient_temperature_c": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "road_temperature_c": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rain_intensity_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "track_wetness_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "standing_water_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "humidity_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pressure_pa": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "wind_speed_mps": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "wind_direction_degrees": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 360
+        },
+        "track_grip_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "transition": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "next_weather_type",
+        "transition_progress_0_to_1",
+        "timing_known"
+      ],
+      "properties": {
+        "next_weather_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "transition_progress_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "timing_known": {
+          "type": "boolean"
+        },
+        "estimated_change_eta_minutes": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "confidence_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_band",
+        "overall_score"
+      ],
+      "properties": {
+        "overall_band": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "blocked"
+          ]
+        },
+        "overall_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

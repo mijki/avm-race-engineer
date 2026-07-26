@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avm-race-engineer.local/contracts/command-envelope-v0.schema.json",
+  "title": "Command Envelope v0",
+  "description": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE. Canonical F0 command envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "command_id",
+    "session_id",
+    "target_driver_id",
+    "target_car_id",
+    "issuer_id",
+    "command_type",
+    "priority",
+    "issued_at_utc",
+    "expires_at_utc",
+    "monotonic_sequence",
+    "strategy_revision",
+    "requires_acknowledgement",
+    "payload",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$"
+    },
+    "command_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_driver_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "target_car_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "issuer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "command_type": {
+      "type": "string",
+      "enum": [
+        "free_text",
+        "box_now",
+        "box_in_laps",
+        "stay_out",
+        "save_fuel",
+        "push",
+        "lift_and_coast",
+        "target_fuel",
+        "target_pace",
+        "traffic_warning",
+        "weather_warning",
+        "strategy_available",
+        "setup_available",
+        "request_status"
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "normal",
+        "high",
+        "critical"
+      ]
+    },
+    "issued_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "monotonic_sequence": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "strategy_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "requires_acknowledgement": {
+      "type": "boolean"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

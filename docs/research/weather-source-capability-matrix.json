@@ -1,0 +1,80 @@
+{
+  "version": "0.1.0-draft",
+  "status": "DRAFT - NOT IMPLEMENTED - SUBJECT TO CHANGE",
+  "generated_on": "2026-07-26",
+  "sdk_root": "E:\\Games\\Steam\\steamapps\\common\\assettocorsa\\extension\\internal\\lua-sdk",
+  "sources": [
+    {
+      "source_id": "assetto_corsa_standard_shared_memory",
+      "surface": "Driver Bridge standard Assetto Corsa shared-memory reader candidate",
+      "current_observation": "candidate_unverified",
+      "transition_hint": "unavailable",
+      "authoritative_schedule": "unavailable",
+      "weather_mutation": "unavailable",
+      "cross_process_readiness": "native_candidate",
+      "confidence": "low",
+      "f0_disposition": "inventory_and_probe_in_f2_f3a",
+      "evidence": "The F0.1 requirement identifies ambient temperature, road temperature, wind, and surface grip as possible standard shared-memory fields; exact structure membership, units, cadence, and runtime behavior still require read-only source inventory and Windows probes."
+    },
+    {
+      "source_id": "csp_generic_app_sim_state",
+      "surface": "ac.getSim() in ac_apps/lib.lua",
+      "current_observation": "documented",
+      "transition_hint": "partial",
+      "authoritative_schedule": "unavailable",
+      "weather_mutation": "unavailable",
+      "cross_process_readiness": "unproven",
+      "confidence": "medium",
+      "f0_disposition": "adopt_for_probe",
+      "evidence": "ac_apps/lib.lua:5295-5304,5365-5383 documents ambientTemperature, roadTemperature, roadGrip, windSpeedKmh, rain fields, weatherType, and filtered weatherConditions."
+    },
+    {
+      "source_id": "csp_filtered_conditions_set",
+      "surface": "ac.ConditionsSet exposed through ac.getSim().weatherConditions",
+      "current_observation": "documented",
+      "transition_hint": "documented",
+      "authoritative_schedule": "unavailable",
+      "weather_mutation": "unavailable",
+      "cross_process_readiness": "unproven",
+      "confidence": "medium",
+      "f0_disposition": "transition_hint_only",
+      "evidence": "ac_apps/lib.lua:7544-7558 documents currentType, upcomingType, transition, temperatures, trackState, wind, and rain fields."
+    },
+    {
+      "source_id": "csp_weatherfx_controller",
+      "surface": "ac_wfx_controller/lib.lua",
+      "current_observation": "controller_authored",
+      "transition_hint": "controller_authored",
+      "authoritative_schedule": "unproven",
+      "weather_mutation": "documented",
+      "cross_process_readiness": "unproven",
+      "confidence": "low",
+      "f0_disposition": "not_selected_as_read_source",
+      "evidence": "ac_wfx_controller/lib.lua:9598-9607 documents ac.setConditionsSet() and ac.setConditionsSet2(), but this inspection did not find a generic-app or external-process schedule read contract."
+    },
+    {
+      "source_id": "csp_shared_structure",
+      "surface": "ac.connect() in ac_apps/lib.lua",
+      "current_observation": "indirect_only",
+      "transition_hint": "indirect_only",
+      "authoritative_schedule": "unavailable",
+      "weather_mutation": "unavailable",
+      "cross_process_readiness": "lua_only_documented",
+      "confidence": "low",
+      "f0_disposition": "probe_helper_only",
+      "evidence": "ac_apps/lib.lua:7161-7182 documents matched layouts and script-type limits; ac_apps/lib.lua:907-923 documents namespaces; ac_apps/lib.lua:7221-7227 documents explicit ordering for layouts."
+    },
+    {
+      "source_id": "csp_memory_mapped_file",
+      "surface": "ac.readMemoryMappedFile() and ac.writeMemoryMappedFile() in ac_apps/lib.lua",
+      "current_observation": "indirect_only",
+      "transition_hint": "indirect_only",
+      "authoritative_schedule": "unavailable",
+      "weather_mutation": "unavailable",
+      "cross_process_readiness": "documented_candidate",
+      "confidence": "medium",
+      "f0_disposition": "bridge_poc_candidate",
+      "evidence": "ac_apps/lib.lua:7424-7429 explicitly mentions files created by a separate process retaining state."
+    }
+  ]
+}

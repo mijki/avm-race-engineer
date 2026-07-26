@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avm-race-engineer.local/contracts/weather-forecast-v0.schema.json",
+  "title": "Weather Forecast v0",
+  "description": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE. Timeline-oriented weather forecast contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "forecast_id",
+    "session_id",
+    "track_id",
+    "layout_id",
+    "generated_at_utc",
+    "source_summary",
+    "display_bucket_minutes",
+    "timeline_status",
+    "points",
+    "confidence",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$"
+    },
+    "forecast_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "track_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "layout_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_summary": {
+      "$ref": "#/$defs/source_summary"
+    },
+    "display_bucket_minutes": {
+      "type": "integer",
+      "minimum": 5
+    },
+    "timeline_status": {
+      "type": "string",
+      "enum": [
+        "scheduled",
+        "estimated",
+        "trending",
+        "current_only",
+        "unknown",
+        "stale"
+      ]
+    },
+    "points": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/forecast_point"
+      }
+    },
+    "confidence": {
+      "$ref": "#/$defs/confidence_summary"
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reason_code"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]+$"
+    },
+    "source_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "source_id",
+        "authoritative"
+      ],
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "controller_schedule",
+            "server_schedule",
+            "derived_trend",
+            "estimated_model",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authoritative": {
+          "type": "boolean"
+        }
+      }
+    },
+    "confidence_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_band",
+        "overall_score"
+      ],
+      "properties": {
+        "overall_band": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "blocked"
+          ]
+        },
+        "overall_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "range_value": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "lower_bound",
+        "upper_bound",
+        "unit"
+      ],
+      "properties": {
+        "lower_bound": {
+          "type": "number"
+        },
+        "upper_bound": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "forecast_point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forecast_time_utc",
+        "horizon_minutes",
+        "bucket_start_utc",
+        "bucket_end_utc",
+        "weather_type",
+        "precipitation_type",
+        "rain_intensity_0_to_1",
+        "ambient_temperature_c",
+        "road_temperature_c",
+        "track_wetness_0_to_1",
+        "standing_water_0_to_1",
+        "wind_speed_mps",
+        "wind_direction_degrees",
+        "source_type",
+        "source_id",
+        "generated_at_utc",
+        "source_age_ms",
+        "confidence",
+        "uncertainty",
+        "reason_codes",
+        "authoritative",
+        "interpolated"
+      ],
+      "properties": {
+        "forecast_time_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "horizon_minutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bucket_start_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "bucket_end_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "weather_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "precipitation_type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "rain",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "rain_intensity_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rain_probability_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "ambient_temperature_c": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "road_temperature_c": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "track_wetness_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "standing_water_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "humidity_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pressure_pa": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "wind_speed_mps": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "wind_direction_degrees": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 360
+        },
+        "track_grip_0_to_1": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "measured_current",
+            "controller_transition",
+            "controller_schedule",
+            "server_schedule",
+            "derived_trend",
+            "estimated_model",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generated_at_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_age_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence_summary"
+        },
+        "uncertainty": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rain_intensity_0_to_1": {
+              "$ref": "#/$defs/range_value"
+            },
+            "track_wetness_0_to_1": {
+              "$ref": "#/$defs/range_value"
+            },
+            "standing_water_0_to_1": {
+              "$ref": "#/$defs/range_value"
+            },
+            "weather_change_eta_minutes": {
+              "$ref": "#/$defs/range_value"
+            }
+          }
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/reason_code"
+          },
+          "uniqueItems": true
+        },
+        "authoritative": {
+          "type": "boolean"
+        },
+        "interpolated": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

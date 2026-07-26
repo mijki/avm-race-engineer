@@ -1,0 +1,565 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avm-race-engineer.local/contracts/engineer-model-snapshot-v0.schema.json",
+  "title": "Engineer Model Snapshot v0",
+  "description": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE. Engineer-facing snapshot that preserves baseline, measured, derived, forecast, and recommendation layers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "snapshot_id",
+    "session_id",
+    "car_id",
+    "driver_id",
+    "track_id",
+    "layout_id",
+    "generated_at_utc",
+    "baseline_plan_summary",
+    "accepted_strategy_summary",
+    "measured_layer",
+    "derived_layer",
+    "forecast_layer",
+    "recommendation_layer",
+    "weather_measurement",
+    "weather_forecast",
+    "confidence_rollup",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$"
+    },
+    "snapshot_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "car_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "driver_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "track_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "layout_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "baseline_plan_summary": {
+      "$ref": "#/$defs/strategy_summary"
+    },
+    "accepted_strategy_summary": {
+      "$ref": "#/$defs/strategy_summary"
+    },
+    "proposed_strategy_summary": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/strategy_summary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "driver_accepted_strategy_summary": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/strategy_summary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "measured_layer": {
+      "$ref": "#/$defs/measured_layer"
+    },
+    "derived_layer": {
+      "$ref": "#/$defs/derived_layer"
+    },
+    "forecast_layer": {
+      "$ref": "#/$defs/forecast_layer"
+    },
+    "recommendation_layer": {
+      "$ref": "#/$defs/recommendation_layer"
+    },
+    "weather_measurement": {
+      "$ref": "#/$defs/weather_ref"
+    },
+    "weather_forecast": {
+      "$ref": "#/$defs/weather_ref"
+    },
+    "alternative_scenarios": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/alternative_scenario"
+      }
+    },
+    "explanations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/explanation_summary"
+      }
+    },
+    "confidence_rollup": {
+      "$ref": "#/$defs/confidence_summary"
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reason_code"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "reason_code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]+$"
+    },
+    "strategy_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy_id",
+        "strategy_revision"
+      ],
+      "properties": {
+        "strategy_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strategy_revision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_pit_lap": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "target_stint_laps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "target_fuel_per_lap_l": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "reserve_target_l": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "measured_layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "telemetry_refs",
+        "weather_measurement_id",
+        "selected_values"
+      ],
+      "properties": {
+        "telemetry_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "weather_measurement_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selected_values": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "current_fuel_l",
+            "lap_number",
+            "normalized_track_position",
+            "pit_state"
+          ],
+          "properties": {
+            "current_fuel_l": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "lap_number": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "normalized_track_position": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "pit_state": {
+              "type": "string",
+              "enum": [
+                "on_track",
+                "pit_entry",
+                "pit_lane",
+                "pit_box",
+                "pit_exit",
+                "garage",
+                "unknown"
+              ]
+            },
+            "traffic_state": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ambient_temperature_c": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "road_temperature_c": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "rain_intensity_0_to_1": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "track_wetness_0_to_1": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    },
+    "derived_layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calculated_race_state_id",
+        "fuel_delta_to_plan_l",
+        "distance_to_pit_entry_m",
+        "fuel_laps_remaining",
+        "weather_trend"
+      ],
+      "properties": {
+        "calculated_race_state_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fuel_delta_to_plan_l": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "distance_to_pit_entry_m": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "fuel_laps_remaining": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "weather_trend": {
+          "type": "string",
+          "enum": [
+            "drying",
+            "wetting",
+            "stable",
+            "worsening_rain",
+            "improving_rain",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "forecast_layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forecast_snapshot_id",
+        "predicted_fuel_at_pit_entry_l",
+        "optimal_pit_lap",
+        "projected_race_end_fuel_l",
+        "strategy_feasibility"
+      ],
+      "properties": {
+        "forecast_snapshot_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "predicted_fuel_at_pit_entry_l": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "optimal_pit_lap": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "projected_race_end_fuel_l": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "strategy_feasibility": {
+          "type": "string",
+          "enum": [
+            "feasible",
+            "marginal",
+            "infeasible",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "recommendation_layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_call",
+        "status"
+      ],
+      "properties": {
+        "primary_call": {
+          "type": "string",
+          "enum": [
+            "on_plan",
+            "save_fuel",
+            "push",
+            "target_pace",
+            "box_this_lap",
+            "box_in_n_laps",
+            "stay_out",
+            "extend",
+            "shorten_stint",
+            "change_tyres",
+            "double_stint_tyres",
+            "replan_required",
+            "waiting_for_valid_data",
+            "low_confidence"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "actionable",
+            "blocked",
+            "advisory"
+          ]
+        },
+        "alternative_calls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "on_plan",
+              "save_fuel",
+              "push",
+              "target_pace",
+              "box_this_lap",
+              "box_in_n_laps",
+              "stay_out",
+              "extend",
+              "shorten_stint",
+              "change_tyres",
+              "double_stint_tyres",
+              "replan_required",
+              "waiting_for_valid_data",
+              "low_confidence"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "weather_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshot_id",
+        "label"
+      ],
+      "properties": {
+        "snapshot_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "enum": [
+            "CURRENT",
+            "SCHEDULED",
+            "ESTIMATED",
+            "TRENDING",
+            "UNKNOWN",
+            "STALE"
+          ]
+        }
+      }
+    },
+    "alternative_scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "label"
+      ],
+      "properties": {
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "delta_total_race_time_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "projected_finish_fuel_l": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "confidence_band": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "blocked",
+            null
+          ]
+        }
+      }
+    },
+    "explanation_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "explanation_id",
+        "calculation_key",
+        "summary"
+      ],
+      "properties": {
+        "explanation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "calculation_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "confidence_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_band",
+        "overall_score"
+      ],
+      "properties": {
+        "overall_band": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "blocked"
+          ]
+        },
+        "overall_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}
