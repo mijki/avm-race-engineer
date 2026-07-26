@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avm-race-engineer.local/contracts/telemetry-envelope-v0.schema.json",
+  "title": "Telemetry Envelope v0",
+  "description": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE. Canonical F0 telemetry envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "message_id",
+    "category",
+    "session_id",
+    "car_id",
+    "capture_time_utc",
+    "capture_time_monotonic_ms",
+    "sequence",
+    "source_attribution",
+    "age_ms",
+    "valid_until_utc",
+    "compatibility",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$"
+    },
+    "message_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "car_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capture_time_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "capture_time_monotonic_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stream_id",
+        "sequence_number"
+      ],
+      "properties": {
+        "stream_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sequence_number": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "source_attribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "origin",
+        "trust_level"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "direct",
+            "derived",
+            "manual",
+            "replayed",
+            "recovered"
+          ]
+        },
+        "adapter": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trust_level": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
+      }
+    },
+    "age_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "valid_until_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "producer_family",
+        "producer_version",
+        "bridge_required"
+      ],
+      "properties": {
+        "producer_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "producer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bridge_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

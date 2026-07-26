@@ -1,0 +1,742 @@
+{
+  "version": "0.1.0-draft",
+  "status": "DRAFT — NOT IMPLEMENTED — SUBJECT TO CHANGE",
+  "generated_on": "2026-07-26",
+  "categories": [
+    {
+      "category": "Session identity",
+      "fields": [
+        {
+          "canonical_name": "session_id",
+          "source": "Driver Bridge session coordinator",
+          "unit": "string",
+          "type": "string",
+          "expected_frequency": "session start",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "derived",
+          "freshness": "sticky until session rollover",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Required by every contract to defend against wrong-session mixing."
+        }
+      ]
+    },
+    {
+      "category": "Session timing",
+      "fields": [
+        {
+          "canonical_name": "session_time_remaining_ms",
+          "source": "Driver Bridge timing capture",
+          "unit": "ms",
+          "type": "integer",
+          "expected_frequency": "10 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "partial",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=250 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Countdown context is baseline engineering information."
+        }
+      ]
+    },
+    {
+      "category": "Driver identity",
+      "fields": [
+        {
+          "canonical_name": "driver_id",
+          "source": "Driver Bridge roster mapping or manual session metadata",
+          "unit": "string",
+          "type": "string",
+          "expected_frequency": "on change",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "unavailable",
+          "classification": "derived",
+          "freshness": "sticky until driver swap",
+          "MVP": true,
+          "confidence": "low",
+          "evidence": "No repository source inventory yet proves a native driver roster path."
+        }
+      ]
+    },
+    {
+      "category": "Car identity",
+      "fields": [
+        {
+          "canonical_name": "car_id",
+          "source": "Driver Bridge selected-car scope",
+          "unit": "string",
+          "type": "string",
+          "expected_frequency": "session start",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "partial",
+          "classification": "direct",
+          "freshness": "sticky until reselection",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Wrong-car rejection depends on a stable canonical car key."
+        }
+      ]
+    },
+    {
+      "category": "Track and layout identity",
+      "fields": [
+        {
+          "canonical_name": "track_layout_id",
+          "source": "Driver Bridge track metadata",
+          "unit": "string",
+          "type": "string",
+          "expected_frequency": "session start",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "sticky until session rollover",
+          "MVP": true,
+          "confidence": "low",
+          "evidence": "Track identity is expected; separate layout identity is still unverified."
+        }
+      ]
+    },
+    {
+      "category": "Motion",
+      "fields": [
+        {
+          "canonical_name": "speed_kph",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "km/h",
+          "type": "number",
+          "expected_frequency": "20 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=100 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Speed is a universal selected-car metric."
+        }
+      ]
+    },
+    {
+      "category": "Position",
+      "fields": [
+        {
+          "canonical_name": "world_position_m",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "m,m,m",
+          "type": "object",
+          "expected_frequency": "10 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "partial",
+          "classification": "direct",
+          "freshness": "<=100 ms",
+          "MVP": true,
+          "confidence": "low",
+          "evidence": "Coordinate-frame conventions are not yet documented in-repo."
+        }
+      ]
+    },
+    {
+      "category": "Controls",
+      "fields": [
+        {
+          "canonical_name": "throttle_input_pct",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "percent",
+          "type": "number",
+          "expected_frequency": "20 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=100 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Private opponent controls are intentionally excluded."
+        }
+      ]
+    },
+    {
+      "category": "Engine and powertrain",
+      "fields": [
+        {
+          "canonical_name": "engine_rpm",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "rpm",
+          "type": "integer",
+          "expected_frequency": "20 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=100 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Foundational powertrain signal for the selected car."
+        }
+      ]
+    },
+    {
+      "category": "Gearbox",
+      "fields": [
+        {
+          "canonical_name": "gear_index",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "gear",
+          "type": "integer",
+          "expected_frequency": "20 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=100 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Gear state is standard selected-car telemetry."
+        }
+      ]
+    },
+    {
+      "category": "Fuel",
+      "fields": [
+        {
+          "canonical_name": "fuel_liters",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "L",
+          "type": "number",
+          "expected_frequency": "5 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=250 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Private opponent fuel remains intentionally unavailable."
+        }
+      ]
+    },
+    {
+      "category": "Tyres",
+      "fields": [
+        {
+          "canonical_name": "tyre_core_temp_c",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "C",
+          "type": "number",
+          "expected_frequency": "10 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=100 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Private opponent tyre data stays unavailable in F0."
+        }
+      ]
+    },
+    {
+      "category": "Brakes",
+      "fields": [
+        {
+          "canonical_name": "brake_temp_c",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "C",
+          "type": "number",
+          "expected_frequency": "5 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=250 ms",
+          "MVP": true,
+          "confidence": "low",
+          "evidence": "Valuable but still unverified in this repository."
+        }
+      ]
+    },
+    {
+      "category": "Suspension",
+      "fields": [
+        {
+          "canonical_name": "damper_travel_mm",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "mm",
+          "type": "number",
+          "expected_frequency": "20 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=100 ms",
+          "MVP": false,
+          "confidence": "low",
+          "evidence": "Deferred because it is high-rate and not essential for the first slice."
+        }
+      ]
+    },
+    {
+      "category": "Ride height",
+      "fields": [
+        {
+          "canonical_name": "ride_height_front_mm",
+          "source": "Driver Bridge telemetry capture",
+          "unit": "mm",
+          "type": "number",
+          "expected_frequency": "10 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=250 ms",
+          "MVP": false,
+          "confidence": "low",
+          "evidence": "Useful for setup work but not necessary for the F0 cut."
+        }
+      ]
+    },
+    {
+      "category": "Aero where available",
+      "fields": [
+        {
+          "canonical_name": "aero_balance_pct",
+          "source": "CSP-specific telemetry or relay derivation",
+          "unit": "percent",
+          "type": "number",
+          "expected_frequency": "1 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "inferred",
+          "freshness": "<=5000 ms",
+          "MVP": false,
+          "confidence": "low",
+          "evidence": "Explicitly conservative on aero and CSP-specific capability."
+        }
+      ]
+    },
+    {
+      "category": "Electronics",
+      "fields": [
+        {
+          "canonical_name": "tc_setting",
+          "source": "Driver Bridge telemetry capture or setup state",
+          "unit": "index",
+          "type": "integer",
+          "expected_frequency": "on change",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=1000 ms",
+          "MVP": false,
+          "confidence": "low",
+          "evidence": "Potentially useful but not proven consistently available."
+        }
+      ]
+    },
+    {
+      "category": "Damage",
+      "fields": [
+        {
+          "canonical_name": "damage_index",
+          "source": "Driver Bridge telemetry capture or normalized derivation",
+          "unit": "index",
+          "type": "number",
+          "expected_frequency": "1 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "partial",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "unavailable",
+          "classification": "inferred",
+          "freshness": "<=2000 ms",
+          "MVP": true,
+          "confidence": "low",
+          "evidence": "Private opponent damage remains unavailable in this draft."
+        }
+      ]
+    },
+    {
+      "category": "Lap and sector timing",
+      "fields": [
+        {
+          "canonical_name": "last_lap_ms",
+          "source": "Driver Bridge timing capture",
+          "unit": "ms",
+          "type": "integer",
+          "expected_frequency": "on lap completion",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "partial",
+          "opponent_availability": "partial",
+          "classification": "direct",
+          "freshness": "sticky until next completed lap",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Core engineering timing baseline."
+        }
+      ]
+    },
+    {
+      "category": "Position and classification",
+      "fields": [
+        {
+          "canonical_name": "overall_position",
+          "source": "Driver Bridge leaderboard state or relay derivation",
+          "unit": "place",
+          "type": "integer",
+          "expected_frequency": "2 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "partial",
+          "classification": "derived",
+          "freshness": "<=1000 ms",
+          "MVP": true,
+          "confidence": "low",
+          "evidence": "Leaderboard source inventory is still missing."
+        }
+      ]
+    },
+    {
+      "category": "Pit state",
+      "fields": [
+        {
+          "canonical_name": "pit_lane_state",
+          "source": "Driver Bridge state capture",
+          "unit": "enum",
+          "type": "string",
+          "expected_frequency": "10 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "partial",
+          "classification": "direct",
+          "freshness": "<=100 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Needed for pit messaging and stint tracking."
+        }
+      ]
+    },
+    {
+      "category": "Flags",
+      "fields": [
+        {
+          "canonical_name": "local_flag_state",
+          "source": "Driver Bridge state capture or manual race control",
+          "unit": "enum",
+          "type": "string",
+          "expected_frequency": "on change",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "partial",
+          "classification": "direct",
+          "freshness": "<=1000 ms",
+          "MVP": true,
+          "confidence": "low",
+          "evidence": "Important operationally but source authority is still unverified."
+        }
+      ]
+    },
+    {
+      "category": "Penalties",
+      "fields": [
+        {
+          "canonical_name": "penalty_state",
+          "source": "Driver Bridge state capture or manual race control",
+          "unit": "enum",
+          "type": "string",
+          "expected_frequency": "on change",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "partial",
+          "classification": "derived",
+          "freshness": "<=1000 ms",
+          "MVP": true,
+          "confidence": "low",
+          "evidence": "Penalty semantics are likely rule-set specific."
+        }
+      ]
+    },
+    {
+      "category": "Weather",
+      "fields": [
+        {
+          "canonical_name": "ambient_temp_c",
+          "source": "CSP generic app weather state via ac.getSim()",
+          "unit": "C",
+          "type": "number",
+          "expected_frequency": "1 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "shared",
+          "classification": "direct",
+          "freshness": "<=60000 ms",
+          "MVP": false,
+          "confidence": "medium",
+          "evidence": "Installed SDK ac_apps/lib.lua:5295-5304,5365-5383 documents ambient temperature and current weather fields; runtime validation remains required."
+        }
+      ]
+    },
+    {
+      "category": "Track wetness",
+      "fields": [
+        {
+          "canonical_name": "track_wetness_pct",
+          "source": "CSP generic app rainWetness field via ac.getSim()",
+          "unit": "percent",
+          "type": "number",
+          "expected_frequency": "1 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "shared",
+          "classification": "direct",
+          "freshness": "<=60000 ms",
+          "MVP": false,
+          "confidence": "medium",
+          "evidence": "Installed SDK ac_apps/lib.lua:5365-5383 documents current rain wetness; semantics and runtime availability still need a CSP probe."
+        }
+      ]
+    },
+    {
+      "category": "Track grip",
+      "fields": [
+        {
+          "canonical_name": "track_grip_state",
+          "source": "CSP-specific telemetry or derived model",
+          "unit": "enum",
+          "type": "string",
+          "expected_frequency": "1 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "shared",
+          "classification": "inferred",
+          "freshness": "<=60000 ms",
+          "MVP": false,
+          "confidence": "low",
+          "evidence": "Grip abstractions are mod-specific and intentionally conservative."
+        }
+      ]
+    },
+    {
+      "category": "Wind",
+      "fields": [
+        {
+          "canonical_name": "wind_speed_mps",
+          "source": "CSP generic app windSpeedKmh field via ac.getSim()",
+          "unit": "m/s",
+          "type": "number",
+          "expected_frequency": "1 Hz",
+          "local_availability": "conditional",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "shared",
+          "classification": "direct",
+          "freshness": "<=60000 ms",
+          "MVP": false,
+          "confidence": "medium",
+          "evidence": "Installed SDK ac_apps/lib.lua:5295-5304 documents current wind speed; runtime availability still needs a CSP probe."
+        }
+      ]
+    },
+    {
+      "category": "Traffic",
+      "fields": [
+        {
+          "canonical_name": "traffic_delta_ahead_ms",
+          "source": "Relay derivation from nearby cars and lap timing",
+          "unit": "ms",
+          "type": "integer",
+          "expected_frequency": "2 Hz",
+          "local_availability": "derived",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "partial",
+          "classification": "derived",
+          "freshness": "<=2000 ms",
+          "MVP": false,
+          "confidence": "low",
+          "evidence": "Depends on broader car-state coverage that is not yet proven."
+        }
+      ]
+    },
+    {
+      "category": "Nearby cars",
+      "fields": [
+        {
+          "canonical_name": "nearby_car_relative_gap_m",
+          "source": "Relay derivation from car positions",
+          "unit": "m",
+          "type": "number",
+          "expected_frequency": "2 Hz",
+          "local_availability": "derived",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "partial",
+          "classification": "derived",
+          "freshness": "<=2000 ms",
+          "MVP": false,
+          "confidence": "low",
+          "evidence": "Nearby-car awareness is plausible, but not yet source-proven."
+        }
+      ]
+    },
+    {
+      "category": "Team-car state",
+      "fields": [
+        {
+          "canonical_name": "teammate_state_summary",
+          "source": "Relay aggregation of teammate bridge feeds",
+          "unit": "object",
+          "type": "object",
+          "expected_frequency": "2 Hz",
+          "local_availability": "unavailable",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "unavailable",
+          "classification": "derived",
+          "freshness": "<=2000 ms",
+          "MVP": false,
+          "confidence": "low",
+          "evidence": "Teammate state is materially better with an active bridge and weak without one."
+        }
+      ]
+    },
+    {
+      "category": "Strategy state",
+      "fields": [
+        {
+          "canonical_name": "active_strategy_revision",
+          "source": "Strategy-domain revision tracker published through Relay Server",
+          "unit": "string",
+          "type": "string",
+          "expected_frequency": "on revision",
+          "local_availability": "derived",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "unavailable",
+          "classification": "derived",
+          "freshness": "sticky until superseded",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "The repo already reserves a strategy-domain package even though no live engine exists yet."
+        }
+      ]
+    },
+    {
+      "category": "Stint state",
+      "fields": [
+        {
+          "canonical_name": "current_stint_lap_count",
+          "source": "Strategy-domain calculation from Driver Bridge lap and pit observations",
+          "unit": "laps",
+          "type": "integer",
+          "expected_frequency": "on lap completion",
+          "local_availability": "derived",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "manual",
+          "opponent_availability": "unavailable",
+          "classification": "derived",
+          "freshness": "updated each completed lap",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Cheap to derive once core lap and pit states exist."
+        }
+      ]
+    },
+    {
+      "category": "Connection health",
+      "fields": [
+        {
+          "canonical_name": "bridge_connection_state",
+          "source": "Driver Bridge or relay health monitor",
+          "unit": "enum",
+          "type": "string",
+          "expected_frequency": "1 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=1000 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Connection state is necessary to interpret stale or missing data."
+        }
+      ]
+    },
+    {
+      "category": "Source health",
+      "fields": [
+        {
+          "canonical_name": "source_error_count",
+          "source": "Driver Bridge adapter diagnostics",
+          "unit": "count",
+          "type": "integer",
+          "expected_frequency": "1 Hz",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "unavailable",
+          "classification": "direct",
+          "freshness": "<=1000 ms",
+          "MVP": true,
+          "confidence": "medium",
+          "evidence": "Source-path health is required to judge trust in the telemetry stream."
+        }
+      ]
+    },
+    {
+      "category": "Data freshness",
+      "fields": [
+        {
+          "canonical_name": "latest_sample_age_ms",
+          "source": "Envelope age calculation from capture and receipt times",
+          "unit": "ms",
+          "type": "integer",
+          "expected_frequency": "per envelope",
+          "local_availability": "expected",
+          "teammate_with_bridge": "available",
+          "teammate_without_bridge": "unavailable",
+          "opponent_availability": "partial",
+          "classification": "derived",
+          "freshness": "computed continuously",
+          "MVP": true,
+          "confidence": "high",
+          "evidence": "Freshness is explicitly called out by the contract set and is transport-agnostic."
+        }
+      ]
+    }
+  ]
+}
