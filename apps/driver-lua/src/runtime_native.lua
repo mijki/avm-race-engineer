@@ -1,9 +1,31 @@
 local namespace = _G.AVM_PITWALL_F1
 local native = {}
 
+local function callable(value)
+  local value_type = type(value)
+  return value_type == "function" or value_type == "userdata"
+end
+
 local function ui_api()
   local candidate = rawget(_G, "ui")
-  return type(candidate) == "table" and candidate or nil
+  local candidate_type = type(candidate)
+  if candidate_type == "table" or candidate_type == "userdata" then
+    return candidate
+  end
+  return nil
+end
+
+local function member(api, name)
+  if api == nil then
+    return nil
+  end
+  local ok, value = pcall(function()
+    return api[name]
+  end)
+  if ok and callable(value) then
+    return value
+  end
+  return nil
 end
 
 local function point(x, y)
@@ -30,8 +52,8 @@ end
 
 local function invoke(name, ...)
   local api = ui_api()
-  local callback = api and api[name]
-  if type(callback) ~= "function" then
+  local callback = member(api, name)
+  if callback == nil then
     return false
   end
   local ok = pcall(callback, ...)
@@ -49,8 +71,9 @@ end
 
 function native.window_size()
   local api = ui_api()
-  if api and type(api.windowSize) == "function" then
-    local ok, result = pcall(api.windowSize)
+  local callback = member(api, "windowSize")
+  if callback ~= nil then
+    local ok, result = pcall(callback)
     if ok and result ~= nil and type(result.x) == "number" and type(result.y) == "number" and result.x > 0 and result.y > 0 then
       return result.x, result.y
     end
@@ -110,10 +133,11 @@ end
 
 function native.emergency(message)
   local api = ui_api()
-  if api and type(api.text) == "function" then
-    local ok = pcall(api.text, "AVM PitWall")
+  local callback = member(api, "text")
+  if callback ~= nil then
+    local ok = pcall(callback, "AVM PitWall")
     if ok then
-      pcall(api.text, safe_text(message or "Runtime recovery"))
+      pcall(callback, safe_text(message or "Runtime recovery"))
       return true
     end
   end

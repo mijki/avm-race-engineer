@@ -9,6 +9,14 @@ end
 
 function icons.draw(name, x, y, size, color)
   local tint = color or theme.tone("info")
+  if not csp.has("drawRectFilled")
+      and not csp.has("drawLine")
+      and not csp.has("drawCircle")
+      and not csp.has("drawCircleFilled")
+      and not csp.has("drawTriangleFilled") then
+    csp.text_at("[" .. tostring(name or "icon") .. "]", x, y, tint)
+    return
+  end
   local half = size * 0.5
   if name == "fuel" then
     csp.rect(x + size * 0.32, y + size * 0.18, size * 0.30, size * 0.64, tint, 2)

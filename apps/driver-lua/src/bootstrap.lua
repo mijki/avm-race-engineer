@@ -44,21 +44,47 @@ end
 
 local function direct_text(value)
   local api = rawget(_G, "ui")
-  if type(api) ~= "table" or type(api.text) ~= "function" then
+  local api_type = type(api)
+  if api_type ~= "table" and api_type ~= "userdata" then
     return false
   end
-  local ok = pcall(api.text, bounded(value))
+  local ok, callback = pcall(function()
+    return api.text
+  end)
+  if not ok or (type(callback) ~= "function" and type(callback) ~= "userdata") then
+    return false
+  end
+  ok = pcall(callback, bounded(value))
   return ok
 end
 
 local function direct_separator()
   local api = rawget(_G, "ui")
-  if type(api) == "table" and type(api.separator) == "function" then
-    pcall(api.separator)
+  local api_type = type(api)
+  if api_type == "table" or api_type == "userdata" then
+    local ok, callback = pcall(function()
+      return api.separator
+    end)
+    if ok and (type(callback) == "function" or type(callback) == "userdata") then
+      pcall(callback)
+    else
+      direct_text("--------------------")
+    end
+  else
+    direct_text("--------------------")
   end
 end
 
+function runtime.begin_frame()
+  lifecycle.entry_shell_drawn = false
+  lifecycle.recovery_drawn = false
+end
+
 function runtime.draw_entry_shell()
+  if lifecycle.entry_shell_drawn then
+    return false
+  end
+  lifecycle.entry_shell_drawn = true
   local drew_title = direct_text("AVM PitWall")
   direct_separator()
   local drew_status = direct_text("F1 runtime active")
@@ -75,6 +101,7 @@ function runtime.draw_recovery(stage, detail)
 end
 
 local function callback_entry(dt)
+  runtime.begin_frame()
   runtime.log_once("first_callback_logged", "first windowMain entry")
   local drew_shell = runtime.draw_entry_shell()
   if drew_shell then

@@ -106,6 +106,40 @@ audio remain degraded inputs rather than callback blockers.
 The real-CSP full-bundle retest remains required. This phase is not marked
 runtime-validated until the corrected package renders all three modes in CSP.
 
+### Follow-up capability correction
+
+The next real-CSP retest proved app discovery, callback ownership, generated
+bundle execution, the direct native shell, and staged recovery. It then
+rejected the old capability superset with `required CSP drawing API
+unavailable`. That gate had classified `ui.windowSize`, `ui.drawRectFilled`,
+and `ui.drawText` as mandatory even though the successful native probe only
+proved `ui.text` and `ui.separator`. Because the old code exposed one boolean,
+it could not identify the exact unavailable member. The corrected adapter now
+reports exact `ui.<name>` entries from the live namespace and treats only
+`ui.text` as mandatory for the emergency and text-first paths.
+
+The capability levels are Level 0 mandatory text/recovery, Level 1 readable
+text-first Compact Mode, Level 2 optional enhanced cards/positioned text/lines/
+shapes/clipping/input, and Level 3 optional audio/storage/host features.
+Missing visual members degrade independently: cards lose backgrounds,
+clipping falls back to ordinary text, icons fall back to labels, sparklines
+are omitted when line drawing is missing, and unavailable buttons remain
+non-interactive without blocking rendering. A Level-1 runtime displays
+`Simplified rendering mode` plus stint/lap/timing, fuel/range/pit distance,
+weather/next change, engineer instruction, and Bridge/Engineer state.
+
+The duplicate initialization shell was traced to bootstrap drawing the direct
+shell and `app.windowMain()` drawing `native.draw_canary()` again in the same
+callback. Bootstrap now owns the shell, both callback aliases share one
+guarded entrypoint, and one per-frame guard prevents a recovery path from
+re-emitting it.
+
+This follow-up has host-side static and deterministic coverage for capability
+levels, exact diagnostics, text-only rendering labels, independent optional
+degradation, callback alias delegation, and single-shell ownership. The real
+CSP status remains runtime-pending until the corrected package is manually
+verified in the installed simulator; host tests are not treated as CSP proof.
+
 ## Security
 
 Keep the shell non-privileged and avoid implicit control capabilities.

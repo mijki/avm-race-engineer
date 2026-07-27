@@ -41,12 +41,14 @@ function expanded.render(vm, boxes)
   line(pace, "LAST REPRESENTATIVE LAP", vm.pace.last_lap, pace.y + 101, "text")
   components.label("ROLLING TREND  " .. string.upper(vm.pace.trend), pace.x + 10, pace.y + pace.height - 24, theme.color("muted"))
   local trend = vm.pace.trend_values
-  for index = 1, #trend - 1 do
-    local left = pace.x + 10 + (index - 1) * ((pace.width - 20) / math.max(1, #trend - 1))
-    local right = pace.x + 10 + index * ((pace.width - 20) / math.max(1, #trend - 1))
-    local left_y = pace.y + pace.height * 0.64 - trend[index] * 10
-    local right_y = pace.y + pace.height * 0.64 - trend[index + 1] * 10
-    csp.line(left, left_y, right, right_y, theme.color("cyan"), 2)
+  if csp.has("drawLine") then
+    for index = 1, #trend - 1 do
+      local left = pace.x + 10 + (index - 1) * ((pace.width - 20) / math.max(1, #trend - 1))
+      local right = pace.x + 10 + index * ((pace.width - 20) / math.max(1, #trend - 1))
+      local left_y = pace.y + pace.height * 0.64 - trend[index] * 10
+      local right_y = pace.y + pace.height * 0.64 - trend[index + 1] * 10
+      csp.line(left, left_y, right, right_y, theme.color("cyan"), 2)
+    end
   end
 
   local tyres = boxes.cards.tyres

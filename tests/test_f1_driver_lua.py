@@ -135,8 +135,65 @@ class F1DriverLuaTests(unittest.TestCase):
     def test_callback_shell_is_direct_and_precedes_application_entry(self) -> None:
         bootstrap = (APP_ROOT / "src" / "bootstrap.lua").read_text(encoding="utf-8")
         self.assertLess(bootstrap.index('function runtime.draw_entry_shell()'), bootstrap.index('local app_entry = runtime.app_entry'))
-        self.assertIn('pcall(api.text, bounded(value))', bootstrap)
+        self.assertIn('pcall(callback, bounded(value))', bootstrap)
         self.assertIn('runtime.draw_recovery("runtime-entry", error_value)', bootstrap)
+
+    def test_capability_levels_report_exact_missing_names(self) -> None:
+        csp = (APP_ROOT / "src" / "adapters" / "csp.lua").read_text(encoding="utf-8")
+        app = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
+        self.assertIn('local mandatory_names = { "ui.text" }', csp)
+        self.assertIn('local optional_names = {', csp)
+        for name in ("ui.drawText", "ui.drawRectFilled", "ui.drawRect", "ui.drawLine", "ui.drawCircle", "ui.drawCircleFilled", "ui.drawTriangleFilled", "ui.drawTextClipped", "ui.invisibleButton", "ui.setCursorScreenPos"):
+            self.assertIn('"' + name + '"', csp)
+        self.assertIn('missing_mandatory = missing_mandatory', csp)
+        self.assertIn('missing_optional = missing_optional', csp)
+        self.assertIn('error("Missing mandatory API: " .. join_names(capabilities.missing_mandatory))', app)
+        self.assertNotIn('required CSP drawing API unavailable', app)
+
+    def test_text_only_environment_has_functional_simplified_renderer(self) -> None:
+        compact = (APP_ROOT / "src" / "ui" / "compact_mode.lua").read_text(encoding="utf-8")
+        app = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
+        for label in ("Simplified rendering mode", "MODE: COMPACT", "STINT:", "LAP:", "ELAPSED:", "REMAINING:", "TARGET STINT:", "FUEL:", "RANGE:", "DISTANCE TO PIT ENTRY:", "WEATHER:", "NEXT WEATHER:", "ENGINEER:", "BRIDGE:"):
+            self.assertIn(label, compact)
+        self.assertIn("compact.render_simplified(vm, state.mode)", app)
+        self.assertIn("not runtime.capabilities.enhanced", app)
+
+    def test_optional_visual_capabilities_degrade_independently(self) -> None:
+        components = (APP_ROOT / "src" / "ui" / "components.lua").read_text(encoding="utf-8")
+        icons = (APP_ROOT / "src" / "ui" / "icons.lua").read_text(encoding="utf-8")
+        expanded = (APP_ROOT / "src" / "ui" / "expanded_mode.lua").read_text(encoding="utf-8")
+        csp = (APP_ROOT / "src" / "adapters" / "csp.lua").read_text(encoding="utf-8")
+        self.assertIn('if csp.has("drawRectFilled") then', components)
+        self.assertIn('if not csp.has("drawRectFilled")', components)
+        self.assertIn('csp.text_at("[" .. tostring(name or "icon") .. "]"', icons)
+        self.assertIn('if csp.has("drawLine") then', expanded)
+        self.assertIn('if not csp.has("invisibleButton") or not csp.has("setCursorScreenPos") then', components)
+        self.assertIn('optional_draw_text_clipped = csp.has("drawTextClipped")', csp)
+
+    def test_native_shell_is_emitted_once_and_aliases_share_entrypoint(self) -> None:
+        bootstrap = (APP_ROOT / "src" / "bootstrap.lua").read_text(encoding="utf-8")
+        app = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
+        self.assertEqual(bootstrap.count('runtime.draw_entry_shell()'), 3)
+        self.assertIn("runtime.begin_frame()", bootstrap)
+        self.assertIn("if lifecycle.entry_shell_drawn then", bootstrap)
+        self.assertNotIn("native.draw_canary()", app)
+        self.assertEqual(bootstrap.count("return callback_entry(dt)"), 2)
+
+    def test_capability_diagnostics_are_bounded_and_once_only(self) -> None:
+        app = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
+        self.assertIn('log_once("capabilities_logged"', app)
+        self.assertIn('missing_mandatory=" .. join_names', app)
+        self.assertIn('missing_optional=" .. join_names', app)
+        self.assertIn("math.min(#values, 8)", app)
+
+    def test_optional_host_features_are_outside_drawing_gate_and_modes_remain_reachable(self) -> None:
+        csp = (APP_ROOT / "src" / "adapters" / "csp.lua").read_text(encoding="utf-8")
+        app = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
+        self.assertNotIn("adapters.audio", csp)
+        self.assertNotIn("adapters.storage", csp)
+        self.assertLess(app.index('local audio_ok'), app.index('log_once("full_mode_logged"'))
+        for mode in ('state.mode == "expanded"', 'state.mode == "garage"', 'compact.render(vm, boxes)'):
+            self.assertIn(mode, app)
 
     def test_race_modes_are_single_screen_and_render_critical_copy(self) -> None:
         source = "\n".join(path.read_text(encoding="utf-8") for path in (APP_ROOT / "src").rglob("*.lua"))
@@ -214,7 +271,7 @@ class F1DriverLuaTests(unittest.TestCase):
 
     def test_runtime_staging_and_first_draw_contract(self) -> None:
         source = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
-        self.assertLess(source.index("native.draw_canary()"), source.index("namespace.app_state.ensure"))
+        self.assertLess(source.index('runtime.capabilities = capabilities'), source.index("namespace.app_state.ensure"))
         for stage in ("namespace-ready", "capabilities", "storage", "app-state", "default-fixture", "view-model", "layout", "selected-mode", "alerts", "footer", "audio"):
             self.assertIn(stage, source)
         self.assertIn("test_fail_stage", source)

@@ -1,5 +1,4 @@
 local namespace = _G.AVM_PITWALL_F1
-local native = namespace.runtime.native
 local csp = namespace.adapters.csp
 local layout = namespace.ui.layout
 local compact = namespace.ui.compact
@@ -24,6 +23,28 @@ end
 
 local function log_once(key, message)
   runtime.log_once(key, message)
+end
+
+local function join_names(values)
+  if type(values) ~= "table" or #values == 0 then
+    return "none"
+  end
+  local result = {}
+  for index = 1, math.min(#values, 8) do
+    result[#result + 1] = values[index]
+  end
+  if #values > 8 then
+    result[#result + 1] = "..."
+  end
+  return table.concat(result, ",")
+end
+
+local function log_capabilities(capabilities)
+  log_once("capabilities_logged", "AVM F1 capabilities: level=" .. tostring(capabilities.level)
+    .. " enhanced=" .. tostring(capabilities.enhanced)
+    .. " simplified=" .. tostring(not capabilities.enhanced)
+    .. " missing_mandatory=" .. join_names(capabilities.missing_mandatory)
+    .. " missing_optional=" .. join_names(capabilities.missing_optional))
 end
 
 local function recover(stage, detail)
@@ -99,13 +120,6 @@ function app.windowMain(dt)
   log_once("initialization_logged", "F1 initialization started")
   lifecycle.callback_count = (lifecycle.callback_count or 0) + 1
 
-  local canary_drawn = native.draw_canary()
-  if canary_drawn then
-    log_once("app_shell_logged", "application native shell rendered")
-  else
-    native.emergency("F1 runtime active")
-  end
-
   local namespace_ok, namespace_error = run_stage("namespace-ready", function()
     assert(type(namespace.adapters) == "table", "adapter namespace unavailable")
     assert(type(namespace.ui) == "table", "UI namespace unavailable")
@@ -119,12 +133,20 @@ function app.windowMain(dt)
 
   local capability_ok, capability_error = run_stage("capabilities", function()
     local capabilities = csp.capabilities()
-    assert(capabilities.required, "required CSP drawing API unavailable")
+    runtime.capabilities = capabilities
+    log_capabilities(capabilities)
+    if not capabilities.required then
+      error("Missing mandatory API: " .. join_names(capabilities.missing_mandatory))
+    end
     assert(capabilities.backend == "csp-native", "unexpected runtime adapter")
     return capabilities
   end)
   if not capability_ok then
-    recover("capabilities", capability_error)
+    local detail = capability_error
+    if runtime.capabilities ~= nil and not runtime.capabilities.required then
+      detail = "Missing mandatory API: " .. join_names(runtime.capabilities.missing_mandatory)
+    end
+    recover("capabilities", detail)
     return
   end
 
@@ -172,7 +194,8 @@ function app.windowMain(dt)
   local width, height, boxes
   local layout_ok, layout_error = run_stage("layout", function()
     width, height = csp.window_size()
-    boxes = layout.for_mode(width, height, state.mode, vm.alert.priority == "critical")
+    local render_mode = runtime.capabilities.enhanced and state.mode or "compact"
+    boxes = layout.for_mode(width, height, render_mode, vm.alert.priority == "critical")
     assert(layout.intersects(boxes.header, width, height), "header layout is not visible")
     assert(layout.intersects(boxes.footer, width, height), "footer layout is not visible")
     for name, required_box in pairs(layout.required_boxes(width, height, state.mode, vm.alert.priority == "critical")) do
@@ -186,14 +209,18 @@ function app.windowMain(dt)
   log_once("layout_ready_logged", "layout ready")
 
   local selected_mode_ok, selected_mode_error = run_stage("selected-mode", function()
-    csp.rect(0, 0, width, height, theme.color("background"), 0)
-    draw_header(vm, boxes)
-    if state.mode == "expanded" then
-      expanded.render(vm, boxes)
-    elseif state.mode == "garage" then
-      garage.render(vm, boxes, state)
+    if not runtime.capabilities.enhanced then
+      compact.render_simplified(vm, state.mode)
     else
-      compact.render(vm, boxes)
+      csp.rect(0, 0, width, height, theme.color("background"), 0)
+      draw_header(vm, boxes)
+      if state.mode == "expanded" then
+        expanded.render(vm, boxes)
+      elseif state.mode == "garage" then
+        garage.render(vm, boxes, state)
+      else
+        compact.render(vm, boxes)
+      end
     end
   end)
   if not selected_mode_ok then

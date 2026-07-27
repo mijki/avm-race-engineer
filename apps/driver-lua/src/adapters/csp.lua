@@ -1,17 +1,40 @@
 local namespace = _G.AVM_PITWALL_F1
 local csp = {}
 
+local function callable(value)
+  local value_type = type(value)
+  return value_type == "function" or value_type == "userdata"
+end
+
 local function ui_api()
   local candidate = rawget(_G, "ui")
-  return type(candidate) == "table" and candidate or nil
+  local candidate_type = type(candidate)
+  if candidate_type == "table" or candidate_type == "userdata" then
+    return candidate
+  end
+  return nil
+end
+
+local function member(api, name)
+  if api == nil then
+    return nil
+  end
+  local ok, value = pcall(function()
+    return api[name]
+  end)
+  if ok and callable(value) then
+    return value
+  end
+  return nil
 end
 
 local function call_ui(name, ...)
   local api = ui_api()
-  if api == nil or type(api[name]) ~= "function" then
+  local callback = member(api, name)
+  if callback == nil then
     return false, nil
   end
-  return pcall(api[name], ...)
+  return pcall(callback, ...)
 end
 
 local function point(x, y)
@@ -48,17 +71,65 @@ function csp.window_size()
   return 780, 380
 end
 
+function csp.has(name)
+  return member(ui_api(), name) ~= nil
+end
+
 function csp.capabilities()
-  local api = ui_api()
-  local required = api ~= nil
-    and type(api.windowSize) == "function"
-    and type(api.drawRectFilled) == "function"
-    and type(api.drawText) == "function"
+  local mandatory_names = { "ui.text" }
+  local optional_names = {
+    "ui.separator",
+    "ui.textColored",
+    "ui.windowSize",
+    "ui.drawText",
+    "ui.drawTextClipped",
+    "ui.drawRectFilled",
+    "ui.drawRect",
+    "ui.drawLine",
+    "ui.drawCircle",
+    "ui.drawCircleFilled",
+    "ui.drawTriangleFilled",
+    "ui.button",
+    "ui.checkbox",
+    "ui.setCursorScreenPos",
+    "ui.invisibleButton",
+  }
+  local missing_mandatory = {}
+  for index = 1, #mandatory_names do
+    local name = mandatory_names[index]
+    if not csp.has(string.sub(name, 4)) then
+      missing_mandatory[#missing_mandatory + 1] = name
+    end
+  end
+  local missing_optional = {}
+  for index = 1, #optional_names do
+    local name = optional_names[index]
+    if not csp.has(string.sub(name, 4)) then
+      missing_optional[#missing_optional + 1] = name
+    end
+  end
+  local enhanced_names = {
+    "ui.drawText",
+    "ui.drawRectFilled",
+    "ui.drawRect",
+    "ui.drawLine",
+    "ui.drawCircle",
+    "ui.drawCircleFilled",
+    "ui.drawTriangleFilled",
+  }
+  local enhanced = #missing_mandatory == 0
+  for index = 1, #enhanced_names do
+    enhanced = enhanced and csp.has(string.sub(enhanced_names[index], 4))
+  end
   return {
     backend = "csp-native",
-    required = required,
-    optional_draw_text_clipped = api ~= nil and type(api.drawTextClipped) == "function",
-    optional_buttons = api ~= nil and type(api.invisibleButton) == "function" and type(api.setCursorScreenPos) == "function",
+    required = #missing_mandatory == 0,
+    level = #missing_mandatory == 0 and (enhanced and 2 or 1) or 0,
+    enhanced = enhanced,
+    missing_mandatory = missing_mandatory,
+    missing_optional = missing_optional,
+    optional_draw_text_clipped = csp.has("drawTextClipped"),
+    optional_buttons = csp.has("invisibleButton") and csp.has("setCursorScreenPos"),
   }
 end
 
@@ -134,9 +205,13 @@ end
 
 function csp.separator(color)
   if color ~= nil then
-    csp.line(0, 0, 0, 0, color, 1)
+    return csp.line(0, 0, 0, 0, color, 1)
   else
-    call_ui("separator")
+    local ok = call_ui("separator")
+    if ok then
+      return true
+    end
+    return csp.text("--------------------")
   end
 end
 

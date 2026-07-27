@@ -49,14 +49,53 @@ Pending runtime evidence:
 - real mode interaction, ACK/repeat behavior, sound playback, stale/offline
   messaging, and resize checks.
 
+### F1 capability correction
+
+The subsequent real-CSP bundle retest reached the callback and rendered the
+native shell, then stopped at the old capability gate with only `required CSP
+drawing API unavailable`. The old gate incorrectly required all of these
+members before any renderer could run: `ui.windowSize`, `ui.drawRectFilled`,
+and `ui.drawText`.
+
+The installed `ac_apps` SDK documents those names, but the successful real
+probe only established `ui.text()` and `ui.separator()`. The old aggregate
+boolean therefore hid which member was absent or unusable in the running CSP
+namespace. The adapter now inspects the real namespace defensively, reports
+each exact missing name, and separates capabilities into these levels:
+
+- Level 0: mandatory `ui.text`; direct shell, recovery, and bounded diagnostics;
+- Level 1: text-first readable Compact Mode, with deterministic size fallbacks;
+- Level 2: optional positioned text, cards, lines, shapes, clipping, and input;
+- Level 3: audio, storage, and other host enhancements, outside the drawing gate.
+
+Missing Level-2 members now disable only their dependent visual behavior. Card
+backgrounds, custom icons, clipping, sparklines, and buttons each have a text
+or omission fallback. If `ui.text` is genuinely absent, recovery reports
+`Missing mandatory API: ui.text`; it no longer reports only an aggregate
+failure. First-entry diagnostics are bounded and once-only, for example:
+`AVM F1 capabilities: level=1 enhanced=false simplified=true ...`.
+
+When Level 2 is unavailable, the application renders a usable text-first
+Compact Mode labelled `Simplified rendering mode`, including stint/lap/timing,
+fuel/range/pit distance, weather/next change, engineer instruction, and Bridge
+/ Engineer state. Expanded and Garage remain reachable when their enhanced
+capabilities are available.
+
+The duplicate native shell was caused by both the bootstrap callback wrapper
+and `app.windowMain()` drawing an initialization canary. Bootstrap is now the
+single shell owner; both callback aliases delegate to that shared entrypoint,
+which resets a per-frame guard and emits the shell once.
+
 Host-side green status must not be interpreted as satisfying those pending
 items.
 
 The host gate now covers manifest/entry shape, callback registration timing,
-direct-shell ordering, four target-size visibility matrices, deterministic
-output, and forced-stage contract hooks. Dynamic callback and forced-failure
-execution remain pending when no Lua runtime is installed; the current
-environment has neither Lupa nor `lua`/`luac`.
+direct-shell ordering, capability-level source contracts, simplified-renderer
+labels, independent visual degradation guards, four target-size visibility
+matrices, deterministic output, and forced-stage contract hooks. Dynamic
+callback, capability-matrix, and forced-failure execution remain pending when
+no Lua runtime is installed; the current environment has neither Lupa nor
+`lua`/`luac`.
 
 ## Gate Criteria
 

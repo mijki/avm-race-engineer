@@ -5,8 +5,12 @@ local icons = namespace.ui.icons
 local components = {}
 
 function components.card(box, title, icon, tone)
-  csp.rect(box.x, box.y, box.width, box.height, theme.color("surface"), 7)
-  csp.outline(box.x, box.y, box.width, box.height, theme.color("border"), 7, 1)
+  if csp.has("drawRectFilled") then
+    csp.rect(box.x, box.y, box.width, box.height, theme.color("surface"), 7)
+  end
+  if csp.has("drawRect") then
+    csp.outline(box.x, box.y, box.width, box.height, theme.color("border"), 7, 1)
+  end
   if icon ~= nil then
     icons.draw(icon, box.x + 10, box.y + 8, 18, theme.tone(tone or "info"))
     csp.text_at(title, box.x + 34, box.y + 9, theme.color("muted"))
@@ -25,8 +29,12 @@ end
 
 function components.badge(text, x, y, width, tone)
   local color = theme.tone(tone or "info")
-  csp.rect(x, y, width, 20, theme.color("surface_alt"), 5)
-  csp.outline(x, y, width, 20, color, 5, 1)
+  if csp.has("drawRectFilled") then
+    csp.rect(x, y, width, 20, theme.color("surface_alt"), 5)
+  end
+  if csp.has("drawRect") then
+    csp.outline(x, y, width, 20, color, 5, 1)
+  end
   csp.text_aligned(text, x + 5, y + 3, width - 10, color)
 end
 
@@ -40,6 +48,9 @@ end
 
 function components.progress(x, y, width, ratio, active_tone)
   local safe_ratio = type(ratio) == "number" and math.max(0, math.min(1, ratio)) or 0
+  if not csp.has("drawRectFilled") then
+    return
+  end
   csp.rect(x, y, width, 5, theme.color("surface_alt"), 3)
   if safe_ratio > 0 then
     csp.rect(x, y, width * safe_ratio, 5, theme.tone(active_tone or "info"), 3)
@@ -48,9 +59,16 @@ end
 
 function components.button(label, x, y, width, tone)
   local color = theme.tone(tone or "info")
-  csp.rect(x, y, width, 24, theme.color("surface_alt"), 5)
-  csp.outline(x, y, width, 24, color, 5, 1)
+  if csp.has("drawRectFilled") then
+    csp.rect(x, y, width, 24, theme.color("surface_alt"), 5)
+  end
+  if csp.has("drawRect") then
+    csp.outline(x, y, width, 24, color, 5, 1)
+  end
   csp.text_aligned(label, x + 4, y + 4, width - 8, color)
+  if not csp.has("invisibleButton") or not csp.has("setCursorScreenPos") then
+    return false
+  end
   local clicked = csp.invisible_button_at(label, x, y, width, 24)
   return clicked
 end
