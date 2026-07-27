@@ -9,66 +9,86 @@ local function safe_size(value, fallback)
   return type(value) == "number" and value > 0 and value or fallback
 end
 
-local function fit_heights(total, first_ratio, first_min, second_ratio, second_min, third_min, gap)
-  local available = math.max(first_min + second_min + third_min, total - gap * 2)
-  local first = math.max(first_min, available * first_ratio)
-  local second = math.max(second_min, available * second_ratio)
-  if first + second > available - third_min then
-    local scale = math.max(0, (available - third_min) / math.max(1, first + second))
-    first = math.max(first_min, first * scale)
-    second = math.max(second_min, second * scale)
-  end
-  local third = math.max(third_min, available - first - second)
-  local overflow = first + second + third - available
-  if overflow > 0 then
-    third = math.max(1, third - overflow)
-  end
-  return first, second, third
+local function clamp(value, low, high)
+  return math.max(low, math.min(high, value))
+end
+
+local function contained(box, width, height)
+  return layout.intersects(box, width, height)
+    and box.x >= 0
+    and box.y >= 0
+    and box.x + box.width <= width
+    and box.y + box.height <= height
 end
 
 function layout.for_mode(width, height, mode, critical)
   width = safe_size(width, 780)
   height = safe_size(height, 380)
+  local margin = 8
   local gap = 6
-  local outer = { x = 8, y = 8, width = math.max(300, width - 16), height = math.max(180, height - 16) }
-  local header_height = mode == "garage" and 48 or 44
-  local banner_height = critical and 56 or 38
-  local footer_height = mode == "garage" and 32 or 26
-  local content_y = outer.y + header_height + gap + banner_height + gap
-  local content_height = math.max(70, outer.height - header_height - banner_height - footer_height - gap * 4)
-  local content_width = outer.width
-  local result = { outer = outer, header = card(outer.x, outer.y, outer.width, header_height), banner = card(outer.x, outer.y + header_height + gap, outer.width, banner_height), footer = card(outer.x, outer.y + outer.height - footer_height, outer.width, footer_height), cards = {} }
+  local outer = { x = margin, y = 6, width = math.max(280, width - margin * 2), height = math.max(150, height - 12) }
+  local header_height = mode == "garage" and 32 or clamp(height * 0.08, 26, 32)
+  local result = {
+    outer = outer,
+    header = card(outer.x, outer.y, outer.width, header_height),
+    banner = nil,
+    footer = nil,
+    cards = {},
+    metrics = { padding = 10, gap = gap, line_height = 14, header_height = header_height },
+  }
 
   if mode == "compact" then
-    local weather_height = math.max(24, math.min(54, content_height * 0.27))
-    local grid_height = math.max(2, content_height - weather_height - gap)
-    local row_height = math.max(1, (grid_height - gap) / 2)
-    local column_width = (content_width - gap) / 2
-    result.cards.fuel = card(outer.x, content_y, column_width, row_height)
-    result.cards.pace = card(outer.x + column_width + gap, content_y, column_width, row_height)
-    result.cards.tyres = card(outer.x, content_y + row_height + gap, column_width, row_height)
-    result.cards.pit = card(outer.x + column_width + gap, content_y + row_height + gap, column_width, row_height)
-    result.cards.weather = card(outer.x, content_y + grid_height + gap, content_width, weather_height)
+    local footer_height = clamp(height * 0.085, 30, 38)
+    local body_y = outer.y + header_height + gap
+    local footer_y = outer.y + outer.height - footer_height
+    local body_height = math.max(52, footer_y - gap - body_y)
+    local primary_height = math.floor((body_height - gap) * 0.58)
+    primary_height = clamp(primary_height, 72, math.max(72, body_height - gap - 52))
+    local secondary_height = body_height - primary_height - gap
+    if secondary_height < 52 then
+      secondary_height = 52
+      primary_height = math.max(42, body_height - secondary_height - gap)
+    end
+    local primary_width = (outer.width - gap * 2) / 3
+    local secondary_width = (outer.width - gap) / 2
+    result.cards.fuel = card(outer.x, body_y, primary_width, primary_height)
+    result.cards.pace = card(outer.x + primary_width + gap, body_y, primary_width, primary_height)
+    result.cards.pit = card(outer.x + (primary_width + gap) * 2, body_y, primary_width, primary_height)
+    local secondary_y = body_y + primary_height + gap
+    result.cards.tyres = card(outer.x, secondary_y, secondary_width, secondary_height)
+    result.cards.weather = card(outer.x + secondary_width + gap, secondary_y, secondary_width, secondary_height)
+    result.footer = card(outer.x, footer_y, outer.width, footer_height)
+    result.banner = result.footer
+    result.cards.engineer = result.footer
+    result.cards.message = result.footer
   elseif mode == "expanded" then
-    local top_height, middle_height, bottom_height = fit_heights(content_height, 0.28, 24, 0.34, 30, 20, gap)
-    local column_width = (content_width - gap) / 2
-    result.cards.timing = card(outer.x, content_y, column_width, top_height)
-    result.cards.message = card(outer.x + column_width + gap, content_y, column_width, top_height)
-    local middle_y = content_y + top_height + gap
-    local cell_width = (content_width - gap * 3) / 4
-    result.cards.fuel = card(outer.x, middle_y, cell_width, middle_height)
-    result.cards.pace = card(outer.x + cell_width + gap, middle_y, cell_width, middle_height)
-    result.cards.tyres = card(outer.x + (cell_width + gap) * 2, middle_y, cell_width, middle_height)
-    result.cards.pit = card(outer.x + (cell_width + gap) * 3, middle_y, cell_width, middle_height)
-    local bottom_y = middle_y + middle_height + gap
-    result.cards.weather = card(outer.x, bottom_y, content_width * 0.74, bottom_height)
-    result.cards.connections = card(outer.x + content_width * 0.74 + gap, bottom_y, content_width * 0.26 - gap, bottom_height)
+    local body_y = outer.y + header_height + gap
+    local body_height = math.max(110, outer.y + outer.height - body_y)
+    local row_gap = gap
+    local row_height = math.max(24, (body_height - row_gap * 4) / 5)
+    local left_card_height = math.max(24, (body_height - row_gap * 2) / 3)
+    local left_width = outer.width * 0.43
+    local right_x = outer.x + left_width + gap
+    local right_width = outer.width - left_width - gap
+    result.cards.timing = card(right_x, body_y, right_width, row_height)
+    result.cards.message = card(right_x, body_y + row_height + row_gap, right_width, row_height)
+    result.cards.tyres = card(right_x, body_y + (row_height + row_gap) * 2, right_width, row_height)
+    result.cards.weather = card(right_x, body_y + (row_height + row_gap) * 3, right_width, row_height)
+    result.cards.connections = card(right_x, body_y + (row_height + row_gap) * 4, right_width, row_height)
+    result.cards.fuel = card(outer.x, body_y, left_width, left_card_height)
+    result.cards.pace = card(outer.x, body_y + left_card_height + row_gap, left_width, left_card_height)
+    result.cards.pit = card(outer.x, body_y + (left_card_height + row_gap) * 2, left_width, left_card_height)
   else
-    local top_height, row_height, _ = fit_heights(content_height, 0.22, 30, 0.39, 24, 24, gap)
-    result.cards.overview = card(outer.x, content_y, outer.width, top_height)
-    result.cards.scenarios = card(outer.x, content_y + top_height + gap, outer.width * 0.58, row_height)
-    result.cards.settings = card(outer.x + outer.width * 0.58 + gap, content_y + top_height + gap, outer.width * 0.42 - gap, row_height)
-    result.cards.diagnostics = card(outer.x, content_y + top_height + row_height + gap * 2, outer.width, row_height)
+    local body_y = outer.y + header_height + gap
+    local overview_height = 50
+    local controls_y = body_y + overview_height + gap
+    local controls_height = 86
+    local diagnostics_y = controls_y + controls_height + gap
+    local diagnostics_height = math.max(52, outer.y + outer.height - diagnostics_y)
+    result.cards.overview = card(outer.x, body_y, outer.width, overview_height)
+    result.cards.scenarios = card(outer.x, controls_y, outer.width * 0.58, controls_height)
+    result.cards.settings = card(outer.x + outer.width * 0.58 + gap, controls_y, outer.width * 0.42 - gap, controls_height)
+    result.cards.diagnostics = card(outer.x, diagnostics_y, outer.width, diagnostics_height)
   end
   return result
 end
@@ -97,28 +117,29 @@ function layout.valid(boxes, width, height, mode, critical)
   if type(boxes) ~= "table" or type(width) ~= "number" or type(height) ~= "number" or width <= 0 or height <= 0 then
     return false
   end
-  local function contained(box)
-    return layout.intersects(box, width, height)
-      and box.x >= 0
-      and box.y >= 0
-      and box.x + box.width <= width
-      and box.y + box.height <= height
-  end
   for _, box in pairs(boxes) do
-    if type(box) == "table" and box.x ~= nil and not contained(box) then
+    if type(box) == "table" and box.x ~= nil and not contained(box, width, height) then
       return false
     end
   end
   if type(boxes.cards) == "table" then
+    local unique_cards = {}
     for _, box in pairs(boxes.cards) do
-      if not contained(box) then
-        return false
+      if not contained(box, width, height) then return false end
+      local seen = false
+      for index = 1, #unique_cards do
+        if unique_cards[index] == box then seen = true; break end
       end
+      if not seen then unique_cards[#unique_cards + 1] = box end
     end
-  end
-  for _, box in pairs(layout.required_boxes(width, height, mode, critical)) do
-    if not contained(box) then
-      return false
+    for left_index = 1, #unique_cards do
+      local left = unique_cards[left_index]
+      for right_index = left_index + 1, #unique_cards do
+        local right = unique_cards[right_index]
+        if left.x < right.x + right.width and right.x < left.x + left.width and left.y < right.y + right.height and right.y < left.y + left.height then
+          return false
+        end
+      end
     end
   end
   return true
@@ -131,10 +152,10 @@ function layout.required_boxes(width, height, mode, critical)
   local fallback_height = math.max(120, height - 20)
   return {
     header = result.header,
-    stint_timing = cards.timing or cards.overview or result.banner,
-    fuel = cards.fuel or cards.overview or result.banner,
-    weather = cards.weather or cards.overview or result.banner,
-    engineer_message = result.banner,
+    stint_timing = cards.timing or cards.overview or result.header,
+    fuel = cards.fuel or cards.overview or result.header,
+    weather = cards.weather or cards.overview or result.header,
+    engineer_message = cards.engineer or cards.message or result.banner or result.header,
     fallback_shell = { x = 10, y = 10, width = fallback_width, height = fallback_height },
   }
 end

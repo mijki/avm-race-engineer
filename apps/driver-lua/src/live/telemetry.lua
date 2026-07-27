@@ -13,7 +13,9 @@ do
   function telemetry.new(config)
     return {
       source_mode = (config and config.default_source_mode) or "live",
+      source_availability = "unavailable",
       source_error = nil,
+      source_diagnostics = csp.diagnostics(),
       latest = nil,
       identity = nil,
       lap = lap_tracker.new(),
@@ -27,12 +29,15 @@ do
       last_derived_s = nil,
       last_weather_s = nil,
       calibration = nil,
+      last_valid_s = nil,
+      last_reset_reason = nil,
     }
   end
 
   function telemetry.set_source_mode(state, mode, mock_fixture)
     if mode ~= "live" and mode ~= "mock" then return false end
     state.source_mode = mode
+    state.source_availability = "unavailable"
     state.source_error = nil
     if mode == "mock" then csp.set_mock_fixture(mock_fixture) else csp.clear_mock_fixture() end
     return true
@@ -55,22 +60,48 @@ do
     state.calculation = nil
     state.last_derived_s = nil
     state.last_weather_s = nil
+    state.last_reset_reason = reason
+  end
+
+  local function derive(state, now_s, config)
+    state.calculation = calculations.compute({
+      snapshot = state.latest,
+      stint = state.stint,
+      store = state.samples,
+      calibration = state.calibration,
+      config = config,
+      now_s = now_s,
+      weather = state.weather_current,
+      weather_trend = state.weather_trend,
+    })
+    state.status = status_builder.build(state, state.calculation, now_s)
+    state.last_derived_s = now_s
   end
 
   function telemetry.update(state, now_s, config)
     local snapshot, reason = csp.read(state.source_mode, now_s)
+    state.source_diagnostics = csp.diagnostics()
     if snapshot == nil then
-      state.latest = nil
       state.source_error = reason or "SOURCE_UNAVAILABLE"
-      lap_tracker.reset(state.lap, "SOURCE_RECOVERY")
-      stint_tracker.reset(state.stint, "SOURCE_RECOVERY")
-      reset_model_history(state, "SOURCE_RECOVERY")
-      state.status = status_builder.recovery(state.source_mode, state.source_error, state)
+      if state.latest ~= nil and state.last_valid_s ~= nil then
+        state.source_availability = "stale"
+        state.source_diagnostics.update_age_s = math.max(0, now_s - state.last_valid_s)
+        derive(state, now_s, config)
+      else
+        state.source_availability = "unavailable"
+        lap_tracker.reset(state.lap, "SOURCE_RECOVERY")
+        stint_tracker.reset(state.stint, "SOURCE_RECOVERY")
+        reset_model_history(state, "SOURCE_RECOVERY")
+        state.status = status_builder.recovery(state.source_mode, state.source_error, state)
+      end
       return state.status
     end
     snapshot.observed_monotonic_s = snapshot.observed_monotonic_s or now_s
     snapshot = enrich_identity(snapshot)
+    state.source_availability = snapshot.source_availability or "live"
     state.source_error = nil
+    state.last_valid_s = now_s
+    state.source_diagnostics.update_age_s = 0
     local previous = state.latest
     if previous then
       local identity_changed = previous.identity and previous.identity.key ~= snapshot.identity.key
@@ -99,18 +130,7 @@ do
       state.last_weather_s = now_s
     end
     if state.last_derived_s == nil or now_s - state.last_derived_s >= config.derived_update_period_s then
-      state.calculation = calculations.compute({
-        snapshot = snapshot,
-        stint = state.stint,
-        store = state.samples,
-        calibration = state.calibration,
-        config = config,
-        now_s = now_s,
-        weather = state.weather_current,
-        weather_trend = state.weather_trend,
-      })
-      state.status = status_builder.build(state, state.calculation, now_s)
-      state.last_derived_s = now_s
+      derive(state, now_s, config)
     end
     return state.status
   end

@@ -3,7 +3,7 @@ local native = {}
 
 local function callable(value)
   local value_type = type(value)
-  if value_type == "function" or value_type == "userdata" then
+  if value_type == "function" or value_type == "userdata" or value_type == "cdata" then
     return true
   end
   if value_type == "table" then
@@ -16,7 +16,7 @@ end
 local function ui_api()
   local candidate = rawget(_G, "ui")
   local candidate_type = type(candidate)
-  if candidate_type == "table" or candidate_type == "userdata" then
+  if candidate_type == "table" or candidate_type == "userdata" or candidate_type == "cdata" then
     return candidate
   end
   return nil

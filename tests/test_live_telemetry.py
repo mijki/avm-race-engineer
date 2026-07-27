@@ -9,9 +9,11 @@ from tools.live_model import (
     SampleStore,
     StintTracker,
     calculate,
+    classify_source,
     forward_distance,
     future_weather,
     identity_key,
+    live_source_from_api,
     normalize_csp,
     visible_projection,
     weather_trend,
@@ -32,6 +34,38 @@ class LiveTelemetryTests(unittest.TestCase):
         self.assertIsNone(snap["car"]["fuel_l"])
         self.assertIsNone(snap["session"]["remaining_s"])
         self.assertIsNone(snap["environment"]["rain_intensity"])
+
+    def test_valid_minimal_live_core_is_live(self) -> None:
+        snap = fixture("live_telemetry_a.json")
+        snap["session"]["lap_limit"] = 30
+        result = live_source_from_api(ac_available=True, sim={}, car={}, snapshot=snap)
+        self.assertEqual(result["availability"], "live")
+        self.assertTrue(result["core_valid"])
+
+    def test_optional_missing_fields_remain_live_and_are_field_level(self) -> None:
+        snap = fixture("live_telemetry_a.json")
+        snap["tyres"]["core_c"] = None
+        snap["environment"]["track_wetness"] = None
+        result = classify_source(snap)
+        self.assertEqual(result["availability"], "partial")
+        self.assertTrue(result["core_valid"])
+        self.assertIn("tyres.core_c", result["optional_missing"])
+        self.assertIn("environment.track_wetness", result["optional_missing"])
+
+    def test_missing_core_is_partial_but_missing_car_or_sim_is_unavailable(self) -> None:
+        snap = fixture("live_telemetry_a.json")
+        snap["car"]["fuel_l"] = None
+        partial = live_source_from_api(ac_available=True, sim={}, car={}, snapshot=snap)
+        self.assertEqual(partial["availability"], "partial")
+        self.assertIn("car.fuel_l", partial["missing_core"])
+        self.assertEqual(live_source_from_api(ac_available=True, sim={}, car=None, snapshot=snap)["availability"], "unavailable")
+        self.assertEqual(live_source_from_api(ac_available=False, sim={}, car={}, snapshot=snap)["availability"], "unavailable")
+
+    def test_last_valid_sample_can_be_classified_stale_without_mock_substitution(self) -> None:
+        snap = fixture("live_telemetry_a.json")
+        result = live_source_from_api(ac_available=True, sim={}, car={}, snapshot=snap, stale=True)
+        self.assertEqual(result["availability"], "stale")
+        self.assertTrue(result["core_valid"])
 
     def test_two_fixtures_change_visible_data_binding(self) -> None:
         first = fixture("live_telemetry_a.json")

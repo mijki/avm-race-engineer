@@ -12,6 +12,76 @@ from statistics import mean, pstdev
 from typing import Any
 
 
+CORE_FIELDS = (
+    "session.elapsed_s",
+    "session.current_lap",
+    "car.speed_kmh",
+    "car.fuel_l",
+    "car.spline",
+    "car.lap_time_s",
+)
+
+OPTIONAL_FIELDS = (
+    "identity.track_id",
+    "identity.layout_id",
+    "identity.car_id",
+    "session.remaining_s",
+    "session.lap_limit",
+    "session.position",
+    "session.total_cars",
+    "session.track_length_m",
+    "car.previous_lap_time_s",
+    "car.best_lap_time_s",
+    "car.pit_lane",
+    "car.pit_box",
+    "tyres.compound",
+    "tyres.core_c",
+    "tyres.surface_c",
+    "tyres.pressure_kpa",
+    "tyres.wear",
+    "environment.ambient_c",
+    "environment.road_c",
+    "environment.weather_type",
+    "environment.rain_intensity",
+    "environment.track_wetness",
+    "environment.standing_water",
+)
+
+
+def _path(snapshot: dict[str, Any], field: str) -> Any:
+    value: Any = snapshot
+    for part in field.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value
+
+
+def _present(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value == value and value not in (float("inf"), float("-inf"))
+    if isinstance(value, str):
+        return value != ""
+    return True
+
+
+def classify_source(snapshot: dict[str, Any], *, stale: bool = False) -> dict[str, Any]:
+    missing_core = [field for field in CORE_FIELDS if not _present(_path(snapshot, field))]
+    optional_missing = [field for field in OPTIONAL_FIELDS if not _present(_path(snapshot, field))]
+    availability = "stale" if stale else ("live" if not missing_core and not optional_missing else "partial")
+    return {"availability": availability, "core_valid": not missing_core, "missing_core": missing_core, "optional_missing": optional_missing}
+
+
+def live_source_from_api(*, ac_available: bool, sim: Any, car: Any, snapshot: dict[str, Any] | None = None, stale: bool = False) -> dict[str, Any]:
+    """Classify the adapter boundary before UI projection or mock selection."""
+    if not ac_available or sim is None or car is None:
+        return {"availability": "unavailable", "core_valid": False, "missing_core": [], "optional_missing": []}
+    result = classify_source(snapshot or {}, stale=stale)
+    return result
+
+
 def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") -> dict[str, Any]:
     def section(name: str) -> dict[str, Any]:
         value = raw.get(name, {})
@@ -22,7 +92,7 @@ def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") 
     car = section("car")
     tyres = section("tyres")
     environment = section("environment")
-    return {
+    snapshot = {
         "source_mode": source_mode,
         "observed_monotonic_s": now_s,
         "identity": {key: identity.get(key) for key in ("car_id", "track_id", "layout_id", "driver_name", "session_id", "configuration_id")},
@@ -31,6 +101,11 @@ def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") 
         "tyres": {key: tyres.get(key) for key in ("compound", "core_c", "surface_c", "wear", "pressure_kpa", "optimum_c")},
         "environment": {key: environment.get(key) for key in ("ambient_c", "road_c", "wind_kmh", "weather_type", "rain_intensity", "track_wetness", "standing_water", "grip")},
     }
+    snapshot["source_availability"] = "mock" if source_mode == "mock" else classify_source(snapshot)["availability"]
+    source = classify_source(snapshot)
+    snapshot["missing_core"] = source["missing_core"]
+    snapshot["optional_missing"] = source["optional_missing"]
+    return snapshot
 
 
 def identity_key(snapshot: dict[str, Any]) -> str:
@@ -198,7 +273,7 @@ def calculate(snapshot: dict[str, Any], stint: StintTracker, samples: SampleStor
 
 def visible_projection(snapshot: dict[str, Any], calculated: dict[str, Any]) -> tuple[str, ...]:
     """A stable host assertion that visible values are data-bound."""
-    return (f"fuel={calculated['fuel']['current']['value']}", f"lap={snapshot['session'].get('current_lap')}", f"pace={calculated['pace']['current']['value']}", f"weather={snapshot['environment'].get('weather_type')}")
+    return (f"fuel={calculated['fuel']['current']['value']}", f"speed={snapshot['car'].get('speed_kmh')}", f"lap={snapshot['session'].get('current_lap')}", f"pace={calculated['pace']['current']['value']}", f"weather={snapshot['environment'].get('weather_type')}")
 
 
 def weather_trend(history: list[dict[str, Any]]) -> str:
@@ -220,29 +295,69 @@ def future_weather() -> dict[str, Any]:
 
 
 def layout_boxes(width: float, height: float, mode: str) -> dict[str, tuple[float, float, float, float]]:
-    margin = 14 if mode == "garage" else 10
-    gap = 10 if mode == "garage" else 8
-    header_h = 42 if mode == "garage" else max(32, min(40, height * 0.14))
-    header = (margin, margin, width - margin * 2, header_h)
+    margin = 8
+    gap = 6
+    outer_h = max(150.0, height - 12.0)
+    header_h = 32.0 if mode == "garage" else max(26.0, min(32.0, height * 0.08))
+    header = (margin, 6.0, width - margin * 2, header_h)
     if mode == "compact":
-        timing_y = margin + header_h + gap
-        timing_h = max(42, min(58, height * 0.19))
-        primary_y = timing_y + timing_h + gap
-        primary_h = max(72, min(94, height * 0.31))
-        support_y = primary_y + primary_h + gap
-        support_h = max(32, height - support_y - margin)
+        footer_h = max(30.0, min(38.0, height * 0.085))
+        body_y = 6.0 + header_h + gap
+        footer_y = 6.0 + outer_h - footer_h
+        body_h = max(52.0, footer_y - gap - body_y)
+        primary_h = max(72.0, min((body_h - gap) * 0.58, body_h - gap - 52.0))
+        secondary_h = body_h - primary_h - gap
+        if secondary_h < 52.0:
+            secondary_h = 52.0
+            primary_h = max(42.0, body_h - secondary_h - gap)
         main_w = width - margin * 2
-        fuel_w = max(250, main_w * 0.58)
-        return {"header": header, "timing": (margin, timing_y, main_w, timing_h), "fuel": (margin, primary_y, fuel_w - gap / 2, primary_h), "pace": (margin + fuel_w + gap / 2, primary_y, main_w - fuel_w - gap / 2, primary_h), "weather": (margin, support_y, main_w * 0.57, support_h), "engineer": (margin + main_w * 0.57 + gap, support_y, main_w * 0.43 - gap, support_h)}
+        primary_w = (main_w - gap * 2) / 3
+        secondary_w = (main_w - gap) / 2
+        secondary_y = body_y + primary_h + gap
+        return {
+            "header": header,
+            "timing": header,
+            "fuel": (margin, body_y, primary_w, primary_h),
+            "pace": (margin + primary_w + gap, body_y, primary_w, primary_h),
+            "pit": (margin + (primary_w + gap) * 2, body_y, primary_w, primary_h),
+            "tyres": (margin, secondary_y, secondary_w, secondary_h),
+            "weather": (margin + secondary_w + gap, secondary_y, secondary_w, secondary_h),
+            "engineer": (margin, footer_y, main_w, footer_h),
+        }
     if mode == "expanded":
-        body_y = margin + header_h + gap
+        body_y = 6.0 + header_h + gap
+        body_h = max(110.0, 6.0 + outer_h - body_y)
         main_w = width - margin * 2
         left_w = main_w * 0.43
         right_x = margin + left_w + gap
         right_w = main_w - left_w - gap
-        row_h = (height - body_y - margin - gap * 3) / 4
-        return {"header": header, "fuel": (margin, body_y, left_w, row_h * 2 + gap), "pit": (margin, body_y + row_h * 2 + gap * 2, left_w, row_h * 2 + gap), "timing": (right_x, body_y, right_w, row_h), "pace": (right_x, body_y + row_h + gap, right_w, row_h), "tyres": (right_x, body_y + (row_h + gap) * 2, right_w, row_h), "weather": (right_x, body_y + (row_h + gap) * 3, right_w, row_h)}
-    return {"header": header, "diagnostics": (margin, margin + header_h + gap, width - margin * 2, height * 4)}
+        row_h = max(24.0, (body_h - gap * 4) / 5)
+        left_card_h = max(24.0, (body_h - gap * 2) / 3)
+        return {
+            "header": header,
+            "timing": (right_x, body_y, right_w, row_h),
+            "message": (right_x, body_y + row_h + gap, right_w, row_h),
+            "tyres": (right_x, body_y + (row_h + gap) * 2, right_w, row_h),
+            "weather": (right_x, body_y + (row_h + gap) * 3, right_w, row_h),
+            "connections": (right_x, body_y + (row_h + gap) * 4, right_w, row_h),
+            "fuel": (margin, body_y, left_w, left_card_h),
+            "pace": (margin, body_y + left_card_h + gap, left_w, left_card_h),
+            "pit": (margin, body_y + (left_card_h + gap) * 2, left_w, left_card_h),
+        }
+    body_y = 6.0 + header_h + gap
+    overview_h = 54.0
+    controls_y = body_y + overview_h + gap
+    controls_h = max(86.0, min(108.0, outer_h * 0.28))
+    diagnostics_y = controls_y + controls_h + gap
+    diagnostics_h = max(52.0, 6.0 + outer_h - diagnostics_y)
+    main_w = width - margin * 2
+    return {
+        "header": header,
+        "overview": (margin, body_y, main_w, overview_h),
+        "scenarios": (margin, controls_y, main_w * 0.58, controls_h),
+        "settings": (margin + main_w * 0.58 + gap, controls_y, main_w * 0.42 - gap, controls_h),
+        "diagnostics": (margin, diagnostics_y, main_w, diagnostics_h),
+    }
 
 
 def layout_valid(boxes: dict[str, tuple[float, float, float, float]], width: float, height: float, mode: str) -> bool:

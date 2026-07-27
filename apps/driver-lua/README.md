@@ -30,6 +30,10 @@ surface and therefore carries the strictest safety constraints.
   alert state, and layout selection remain host-testable. The first bundle
   module registers both `script.windowMain(dt)` and the manifest-requested
   global `windowMain(dt)` before later modules initialize.
+- The CSP adapter accepts the LuaJIT `cdata` callable shape used by the
+  installed runtime for UI members such as `ui.windowSize` and
+  `ui.availableSpace`; all live reads remain protected and normalized at the
+  adapter boundary.
 - The shell has exactly three modes: Compact Race, Expanded Race, and
   Garage/Diagnostics. Race modes are fixed single-screen compositions with no
   scrolling child UI.
@@ -102,12 +106,20 @@ See [docs/ux/driver-client-ux.md](../../docs/ux/driver-client-ux.md) and
 
 Status: host-implemented; real CSP validation pending.
 
-The default source is LIVE CSP telemetry through src/adapters/csp.lua.
+The default source is LIVE CSP telemetry through `src/adapters/csp.lua`.
 Normalized state flows through identity, lap, stint, bounded sample, weather,
 track-model, and pure local-calculation modules into one driver-status view
 model. The local calculation model is explicitly temporary and
 non-authoritative; Driver Bridge remains the planned production owner.
 
-MOCK is available only from Garage diagnostics. Malformed or unavailable LIVE
-data enters RECOVERY and never becomes mock data. Race renderers contain no
-scenario-specific values and show explicit unavailable text.
+MOCK is available only from Garage diagnostics. LIVE reports `LIVE`, `PARTIAL`,
+`STALE`, or `OFFLINE` availability in the race shell; malformed or unavailable
+LIVE data enters recovery and never becomes mock data. The adapter records one
+startup probe and one first-normalization rejection for Garage diagnostics,
+while race renderers show only readable source state and unavailable text.
+
+The Compact layout is a bounded single-screen composition: a source-labelled
+header, three primary FUEL/PACE/PIT cards, two secondary TYRES/WEATHER cards,
+and an ENGINEER status footer. Host geometry checks cover the observed CSP
+window sizes 700x300, 800x408, and 900x450; interactive validation is still
+pending.

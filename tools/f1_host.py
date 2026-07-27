@@ -46,59 +46,69 @@ def local_count(text: str) -> int:
 
 def required_layout_boxes(width: int, height: int, mode: str = "compact", critical: bool = False) -> dict[str, tuple[float, float, float, float]]:
     """Mirror the F1 layout's bounded geometry for host visibility checks."""
+    margin = 8.0
     gap = 6.0
-    outer_x, outer_y = 8.0, 8.0
-    outer_width = max(300.0, width - 16.0)
-    outer_height = max(180.0, height - 16.0)
-    header_height = 48.0 if mode == "garage" else 44.0
-    banner_height = 56.0 if critical else 38.0
-    footer_height = 32.0 if mode == "garage" else 26.0
-    content_y = outer_y + header_height + gap + banner_height + gap
-    content_height = max(70.0, outer_height - header_height - banner_height - footer_height - gap * 4)
-    cards: dict[str, tuple[float, float, float, float]] = {}
+    outer_height = max(150.0, height - 12.0)
+    header_height = 32.0 if mode == "garage" else max(26.0, min(32.0, height * 0.08))
+    outer_width = width - margin * 2
+    header = (margin, 6.0, outer_width, header_height)
     if mode == "compact":
-        weather_height = max(24.0, min(54.0, content_height * 0.27))
-        grid_height = max(2.0, content_height - weather_height - gap)
-        row_height = max(1.0, (grid_height - gap) / 2)
-        column_width = (outer_width - gap) / 2
-        cards["fuel"] = (outer_x, content_y, column_width, row_height)
-        cards["weather"] = (outer_x, content_y + grid_height + gap, outer_width, weather_height)
-    elif mode == "expanded":
-        available = max(24.0 + 30.0 + 20.0, content_height - gap * 2)
-        top_height = max(24.0, available * 0.28)
-        middle_height = max(30.0, available * 0.34)
-        if top_height + middle_height > available - 20.0:
-            scale = max(0.0, (available - 20.0) / max(1.0, top_height + middle_height))
-            top_height = max(24.0, top_height * scale)
-            middle_height = max(30.0, middle_height * scale)
-        bottom_height = max(20.0, available - top_height - middle_height)
-        overflow = top_height + middle_height + bottom_height - available
-        if overflow > 0:
-            bottom_height = max(1.0, bottom_height - overflow)
-        column_width = (outer_width - gap) / 2
-        middle_y = content_y + top_height + gap
-        cell_width = (outer_width - gap * 3) / 4
-        cards["timing"] = (outer_x, content_y, column_width, top_height)
-        cards["fuel"] = (outer_x, middle_y, cell_width, middle_height)
-        bottom_y = middle_y + middle_height + gap
-        cards["weather"] = (outer_x, bottom_y, outer_width * 0.74, bottom_height)
-    else:
-        available = max(30.0 + 24.0 + 24.0, content_height - gap * 2)
-        top_height = max(30.0, available * 0.22)
-        row_height = max(24.0, available * 0.39)
-        if top_height + row_height > available - 24.0:
-            scale = max(0.0, (available - 24.0) / max(1.0, top_height + row_height))
-            top_height = max(30.0, top_height * scale)
-            row_height = max(24.0, row_height * scale)
-        cards["overview"] = (outer_x, content_y, outer_width, top_height)
-
-    banner = (outer_x, outer_y + header_height + gap, outer_width, banner_height)
+        footer_height = max(30.0, min(38.0, height * 0.085))
+        body_y = 6.0 + header_height + gap
+        footer_y = 6.0 + outer_height - footer_height
+        body_height = max(52.0, footer_y - gap - body_y)
+        primary_height = max(72.0, min((body_height - gap) * 0.58, body_height - gap - 52.0))
+        secondary_height = body_height - primary_height - gap
+        if secondary_height < 52.0:
+            secondary_height = 52.0
+            primary_height = max(42.0, body_height - secondary_height - gap)
+        primary_width = (outer_width - gap * 2) / 3
+        secondary_width = (outer_width - gap) / 2
+        secondary_y = body_y + primary_height + gap
+        return {
+            "header": header,
+            "stint_timing": header,
+            "fuel": (margin, body_y, primary_width, primary_height),
+            "pace": (margin + primary_width + gap, body_y, primary_width, primary_height),
+            "pit": (margin + (primary_width + gap) * 2, body_y, primary_width, primary_height),
+            "tyres": (margin, secondary_y, secondary_width, secondary_height),
+            "weather": (margin + secondary_width + gap, secondary_y, secondary_width, secondary_height),
+            "engineer_message": (margin, footer_y, outer_width, footer_height),
+            "fallback_shell": (10.0, 10.0, max(160.0, width - 20.0), max(120.0, height - 20.0)),
+        }
+    if mode == "expanded":
+        body_y = 6.0 + header_height + gap
+        body_height = max(110.0, 6.0 + outer_height - body_y)
+        left_width = outer_width * 0.43
+        right_x = margin + left_width + gap
+        right_width = outer_width - left_width - gap
+        row_height = max(24.0, (body_height - gap * 4) / 5)
+        left_card_height = max(24.0, (body_height - gap * 2) / 3)
+        return {
+            "header": header,
+            "stint_timing": (right_x, body_y, right_width, row_height),
+            "fuel": (margin, body_y, left_width, left_card_height),
+            "pace": (margin, body_y + left_card_height + gap, left_width, left_card_height),
+            "pit": (margin, body_y + (left_card_height + gap) * 2, left_width, left_card_height),
+            "weather": (right_x, body_y + (row_height + gap) * 3, right_width, row_height),
+            "engineer_message": (right_x, body_y + row_height + gap, right_width, row_height),
+            "tyres": (right_x, body_y + (row_height + gap) * 2, right_width, row_height),
+            "connections": (right_x, body_y + (row_height + gap) * 4, right_width, row_height),
+            "fallback_shell": (10.0, 10.0, max(160.0, width - 20.0), max(120.0, height - 20.0)),
+        }
+    body_y = 6.0 + header_height + gap
+    overview_height = 54.0
+    controls_y = body_y + overview_height + gap
+    controls_height = max(86.0, min(108.0, outer_height * 0.28))
+    diagnostics_y = controls_y + controls_height + gap
+    diagnostics_height = max(52.0, 6.0 + outer_height - diagnostics_y)
+    overview = (margin, body_y, outer_width, overview_height)
     return {
-        "header": (outer_x, outer_y, outer_width, header_height),
-        "stint_timing": cards.get("timing", cards.get("overview", banner)),
-        "fuel": cards.get("fuel", cards.get("overview", banner)),
-        "weather": cards.get("weather", cards.get("overview", banner)),
-        "engineer_message": banner,
+        "header": header,
+        "stint_timing": overview,
+        "fuel": overview,
+        "weather": overview,
+        "engineer_message": (margin, diagnostics_y, outer_width, diagnostics_height),
         "fallback_shell": (10.0, 10.0, max(160.0, width - 20.0), max(120.0, height - 20.0)),
     }
 

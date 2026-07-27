@@ -22,7 +22,7 @@ do
       track_wetness = clamp(environment.track_wetness),
       standing_water = clamp(environment.standing_water),
       grip = environment.grip,
-      source = "CSP measured current",
+      source = "Measured now",
       freshness_s = 0,
     }
   end

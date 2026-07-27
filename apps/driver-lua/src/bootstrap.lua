@@ -18,7 +18,7 @@ runtime.lifecycle = lifecycle
 
 local function callable(value)
   local value_type = type(value)
-  if value_type == "function" or value_type == "userdata" then
+  if value_type == "function" or value_type == "userdata" or value_type == "cdata" then
     return true
   end
   if value_type == "table" then
@@ -125,7 +125,7 @@ end
 local function direct_text(value)
   local api = rawget(_G, "ui")
   local api_type = type(api)
-  if api_type ~= "table" and api_type ~= "userdata" then
+  if api_type ~= "table" and api_type ~= "userdata" and api_type ~= "cdata" then
     return false
   end
   local ok, callback = pcall(function()
@@ -144,7 +144,7 @@ end
 local function direct_separator()
   local api = rawget(_G, "ui")
   local api_type = type(api)
-  if api_type == "table" or api_type == "userdata" then
+  if api_type == "table" or api_type == "userdata" or api_type == "cdata" then
     local ok, callback = pcall(function()
       return api.separator
     end)

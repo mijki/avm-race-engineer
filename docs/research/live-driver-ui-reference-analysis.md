@@ -46,6 +46,7 @@ It is a design input, not a source dependency.
 ## AVM visual distinction
 
 AVM uses a dark charcoal surface, teal/cyan measured-data accent, restrained
-raised cards, and a five-region Compact hierarchy: stint, fuel, pace/tyres,
-weather/track, and engineer. The identity is intentionally text-first and
+raised cards, and a bounded Compact hierarchy: a source-labelled header,
+three primary FUEL/PACE/PIT cards, two secondary TYRES/WEATHER cards, and an
+ENGINEER status footer. The identity is intentionally text-first and
 calculation-aware rather than a copy of either reference dashboard.

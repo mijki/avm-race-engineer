@@ -4,7 +4,11 @@ local unpack_values = table.unpack or unpack
 
 local function callable(value)
   local value_type = type(value)
-  if value_type == "function" or value_type == "userdata" then
+  -- CSP exposes some callable members as LuaJIT cdata (for example
+  -- ui.windowSize and ui.availableSpace). Keep the adapter permissive at this
+  -- boundary; protected calls below still decide whether a member actually
+  -- works in the active runtime.
+  if value_type == "function" or value_type == "userdata" or value_type == "cdata" then
     return true
   end
   if value_type == "table" then
@@ -17,7 +21,7 @@ end
 local function ui_api()
   local candidate = rawget(_G, "ui")
   local candidate_type = type(candidate)
-  if candidate_type == "table" or candidate_type == "userdata" then
+  if candidate_type == "table" or candidate_type == "userdata" or candidate_type == "cdata" then
     return candidate
   end
   return nil
@@ -159,30 +163,41 @@ local function size_from(result)
   return nil, nil
 end
 
+local function read_ui_member(name)
+  local candidate = member(ui_api(), name)
+  if candidate == nil then
+    return "unavailable", nil, "missing member"
+  end
+  if callable(candidate) then
+    return call_ui(name)
+  end
+  return "value", candidate, nil
+end
+
 function csp.window_size()
-  local status, result = call_ui("availableSpace")
+  local status, result = read_ui_member("availableSpace")
   local width, height = size_from(result)
-  if status == "drawn" and width ~= nil then
+  if (status == "drawn" or status == "value") and width ~= nil then
     return width, height, "availableSpace"
   end
 
-  status, result = call_ui("availableSpaceX")
+  status, result = read_ui_member("availableSpaceX")
   local available_width = valid_number(result) and result or nil
-  status, result = call_ui("availableSpaceY")
+  status, result = read_ui_member("availableSpaceY")
   local available_height = valid_number(result) and result or nil
   if available_width ~= nil and available_height ~= nil and available_width > 0 and available_height > 0 then
     return available_width, available_height, "availableSpaceX/Y"
   end
 
-  status, result = call_ui("windowSize")
+  status, result = read_ui_member("windowSize")
   width, height = size_from(result)
-  if status == "drawn" and width ~= nil then
+  if (status == "drawn" or status == "value") and width ~= nil then
     return width, height, "windowSize"
   end
 
-  status, result = call_ui("windowWidth")
+  status, result = read_ui_member("windowWidth")
   local window_width = valid_number(result) and result or nil
-  status, result = call_ui("windowHeight")
+  status, result = read_ui_member("windowHeight")
   local window_height = valid_number(result) and result or nil
   if window_width ~= nil and window_height ~= nil and window_width > 0 and window_height > 0 then
     return window_width, window_height, "windowWidth/Height"
@@ -191,8 +206,8 @@ function csp.window_size()
 end
 
 function csp.ui_scale()
-  local status, result = call_ui("uiScale")
-  if status == "drawn" and valid_number(result) and result > 0 then
+  local status, result = read_ui_member("uiScale")
+  if (status == "drawn" or status == "value") and valid_number(result) and result > 0 then
     return result
   end
   return 1
@@ -326,10 +341,11 @@ function csp.text_at(value, x, y, color)
   return fallback_status
 end
 
-function csp.text_aligned(value, x, y, width, color)
+function csp.text_aligned(value, x, y, width, color, height)
   local text = type(value) == "string" and value or tostring(value or "")
   local left = point(x, y)
-  local right = point(x + math.max(1, width), y + 24)
+  local clip_height = math.max(1, height or 24)
+  local right = point(x + math.max(1, width), y + clip_height)
   local alignment = point(0, 0)
   if left ~= nil and right ~= nil and alignment ~= nil and valid_color(color) then
     local status, _, reason = call_ui("drawTextClipped", text, left, right, color, alignment, true)
@@ -456,49 +472,209 @@ namespace.adapters.csp = csp
 -- Live telemetry remains behind the CSP adapter. UI modules only consume the
 -- normalized snapshot produced here and never inspect the raw CSP objects.
 local telemetry_fixture = nil
+local live_diagnostics = {
+  availability = "unavailable",
+  first_failure = nil,
+  first_normalization_rejection = nil,
+  api = {},
+  normalized_core = { valid = false, missing = {} },
+  optional_missing = {},
+  identity = {},
+  update_age_s = nil,
+}
+
+local telemetry_core_fields = {
+  "session.elapsed_s",
+  "session.current_lap",
+  "car.speed_kmh",
+  "car.fuel_l",
+  "car.spline",
+  "car.lap_time_s",
+}
+
+local telemetry_optional_fields = {
+  "identity.track_id",
+  "identity.layout_id",
+  "identity.car_id",
+  "session.remaining_s",
+  "session.lap_limit",
+  "session.position",
+  "session.total_cars",
+  "session.track_length_m",
+  "car.previous_lap_time_s",
+  "car.best_lap_time_s",
+  "car.pit_lane",
+  "car.pit_box",
+  "tyres.compound",
+  "tyres.core_c",
+  "tyres.surface_c",
+  "tyres.pressure_kpa",
+  "tyres.wear",
+  "environment.ambient_c",
+  "environment.road_c",
+  "environment.weather_type",
+  "environment.rain_intensity",
+  "environment.track_wetness",
+  "environment.standing_water",
+}
 
 local function telemetry_finite(value)
   return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
 end
 
-local function telemetry_field(object, name)
-  if object == nil then
-    return nil
+local function telemetry_safe_text(value)
+  local ok, result = pcall(tostring, value)
+  local text = ok and result or "<unprintable>"
+  text = string.gsub(text, "[%c]", " ")
+  if #text > 120 then
+    return string.sub(text, 1, 117) .. "..."
   end
+  return text
+end
+
+local function telemetry_value_text(value)
+  if value == nil then return "nil" end
+  if type(value) == "string" then return "\"" .. telemetry_safe_text(value) .. "\"" end
+  return telemetry_safe_text(value)
+end
+
+local function telemetry_member(object, name)
+  if object == nil then return nil end
   local ok, value = pcall(function() return object[name] end)
-  if ok and value ~= nil and type(value) ~= "function" then
+  return ok and value or nil
+end
+
+local function telemetry_field(object, name)
+  local value = telemetry_member(object, name)
+  -- State fields can themselves be LuaJIT cdata values. Only a Lua function
+  -- is unambiguously a method here; callable cdata is handled at API call
+  -- sites so numeric/vector state is not discarded as "not a field".
+  if value ~= nil and type(value) ~= "function" then
     return value
   end
   return nil
 end
 
-local function telemetry_call(object, name, ...)
-  local callback = telemetry_field(object, name)
-  if not callable(callback) then
-    return nil
-  end
-  local ok, value = pcall(callback, object, ...)
+local function telemetry_index(object, index)
+  if object == nil then return nil end
+  local ok, value = pcall(function() return object[index] end)
   return ok and value or nil
+end
+
+local function telemetry_invoke(callback, receiver, ...)
+  if not callable(callback) then
+    return false, nil, "not callable"
+  end
+  local ok, value = pcall(callback, ...)
+  if ok then
+    return true, value, nil
+  end
+  local first_error = telemetry_safe_text(value)
+  if receiver ~= nil then
+    local retry_ok, retry_value = pcall(callback, receiver, ...)
+    if retry_ok then
+      return true, retry_value, nil
+    end
+    return false, nil, first_error .. " | receiver call: " .. telemetry_safe_text(retry_value)
+  end
+  return false, nil, first_error
+end
+
+local function telemetry_call(object, name, ...)
+  local callback = telemetry_member(object, name)
+  local ok, value = telemetry_invoke(callback, object, ...)
+  return ok and value or nil
+end
+
+local function telemetry_call_api(api, name, ...)
+  local callback = telemetry_member(api, name)
+  local ok, value, error_value = telemetry_invoke(callback, nil, ...)
+  return ok, value, error_value, callback
 end
 
 local function telemetry_first(object, names)
   for index = 1, #names do
     local value = telemetry_field(object, names[index])
-    if value ~= nil then
-      return value
-    end
+    if value ~= nil then return value end
   end
   return nil
 end
 
-local function telemetry_optional_method(object, names)
-  for index = 1, #names do
-    local value = telemetry_call(object, names[index])
-    if value ~= nil then
-      return value
+local function telemetry_average(sum, count)
+  return count > 0 and sum / count or nil
+end
+
+local function telemetry_path(snapshot, path)
+  local value = snapshot
+  for part in string.gmatch(path, "[^%.]+") do
+    value = type(value) == "table" and value[part] or nil
+  end
+  return value
+end
+
+local function telemetry_present(value)
+  if value == nil then return false end
+  if type(value) == "number" then return telemetry_finite(value) end
+  if type(value) == "string" then return value ~= "" end
+  return true
+end
+
+local function telemetry_classify(snapshot)
+  local missing_core = {}
+  for index = 1, #telemetry_core_fields do
+    local field = telemetry_core_fields[index]
+    if not telemetry_present(telemetry_path(snapshot, field)) then
+      missing_core[#missing_core + 1] = field
     end
   end
-  return nil
+  local optional_missing = {}
+  for index = 1, #telemetry_optional_fields do
+    local field = telemetry_optional_fields[index]
+    if not telemetry_present(telemetry_path(snapshot, field)) then
+      optional_missing[#optional_missing + 1] = field
+    end
+  end
+  local valid = #missing_core == 0
+  local complete = valid and #optional_missing == 0
+  live_diagnostics.normalized_core = { valid = valid, missing = missing_core }
+  live_diagnostics.optional_missing = optional_missing
+  live_diagnostics.availability = complete and "live" or "partial"
+  return complete and "live" or "partial", missing_core, optional_missing
+end
+
+local function telemetry_probe_result(member_value, attempted, ok, result, error_value)
+  if member_value == nil then return "missing" end
+  if not callable(member_value) then return type(member_value) .. "/not-callable" end
+  if not attempted then return type(member_value) .. "/not-called" end
+  if ok then return type(member_value) .. "->" .. type(result) end
+  return type(member_value) .. "/error=" .. telemetry_safe_text(error_value)
+end
+
+local function record_live_probe(ac_api, get_sim, sim_attempted, sim_ok, sim, sim_error, get_car, car_attempted, car_ok, car, car_error, get_session, session_attempted, session_ok, session, session_error, failure)
+  local probe = "AVM F1 live source probe: ac=" .. type(ac_api)
+    .. " getSim=" .. telemetry_probe_result(get_sim, sim_attempted, sim_ok, sim, sim_error)
+    .. " getCar=" .. telemetry_probe_result(get_car, car_attempted, car_ok, car, car_error)
+    .. " getSession=" .. telemetry_probe_result(get_session, session_attempted, session_ok, session, session_error)
+    .. " car0=" .. (car_attempted and (car_ok and type(car) or "error=" .. telemetry_safe_text(car_error)) or "not-called")
+    .. " sim=" .. (sim_attempted and (sim_ok and type(sim) or "error=" .. telemetry_safe_text(sim_error)) or "not-called")
+    .. " session=" .. (session_attempted and (session_ok and type(session) or "error=" .. telemetry_safe_text(session_error)) or "not-called")
+    .. " failure=" .. telemetry_safe_text(failure or "none")
+  if live_diagnostics.probe == nil then
+    live_diagnostics.probe = probe
+    live_diagnostics.first_failure = failure
+    namespace.runtime.log_once("live_source_probe_logged", probe)
+  end
+end
+
+local function normalization_rejection(field, value, reason)
+  local message = "AVM F1 live normalization rejected: field=" .. tostring(field)
+    .. " value_type=" .. type(value)
+    .. " value=" .. telemetry_value_text(value)
+    .. " reason=" .. tostring(reason)
+  if live_diagnostics.first_normalization_rejection == nil then
+    live_diagnostics.first_normalization_rejection = message
+    namespace.runtime.log_once("live_normalization_rejected_logged", message)
+  end
 end
 
 function csp.set_mock_fixture(fixture)
@@ -509,16 +685,21 @@ function csp.clear_mock_fixture()
   telemetry_fixture = nil
 end
 
+function csp.diagnostics()
+  return live_diagnostics
+end
+
 function csp.normalize(raw, observed_monotonic_s, source_mode)
   if type(raw) ~= "table" then
+    normalization_rejection("snapshot", raw, "SOURCE_UNAVAILABLE")
     return nil, "SOURCE_UNAVAILABLE"
   end
-  local identity = raw.identity or {}
-  local session = raw.session or {}
-  local car = raw.car or {}
-  local tyres = raw.tyres or {}
-  local environment = raw.environment or {}
-  return {
+  local identity = type(raw.identity) == "table" and raw.identity or {}
+  local session = type(raw.session) == "table" and raw.session or {}
+  local car = type(raw.car) == "table" and raw.car or {}
+  local tyres = type(raw.tyres) == "table" and raw.tyres or {}
+  local environment = type(raw.environment) == "table" and raw.environment or {}
+  local normalized = {
     source_mode = source_mode or raw.source_mode or "live",
     observed_monotonic_s = observed_monotonic_s,
     identity = {
@@ -550,8 +731,8 @@ function csp.normalize(raw, observed_monotonic_s, source_mode)
       fuel_capacity_l = car.fuel_capacity_l,
       spline = car.spline,
       distance_session_km = car.distance_session_km,
-      pit_lane = car.pit_lane == true,
-      pit_box = car.pit_box == true,
+      pit_lane = car.pit_lane,
+      pit_box = car.pit_box,
       lap_time_s = car.lap_time_s,
       previous_lap_time_s = car.previous_lap_time_s,
       best_lap_time_s = car.best_lap_time_s,
@@ -579,47 +760,113 @@ function csp.normalize(raw, observed_monotonic_s, source_mode)
       grip = environment.grip,
     },
   }
-end
-
-local function telemetry_average(sum, count)
-  return count > 0 and sum / count or nil
+  local availability, missing_core = telemetry_classify(normalized)
+  if source_mode == "mock" then
+    live_diagnostics.availability = "mock"
+    normalized.source_availability = "mock"
+  else
+    normalized.source_availability = availability
+  end
+  normalized.missing_core = missing_core
+  normalized.optional_missing = live_diagnostics.optional_missing
+  if #missing_core > 0 then
+    normalization_rejection(missing_core[1], telemetry_path(normalized, missing_core[1]), "SOURCE_PARTIAL")
+  end
+  return normalized, nil
 end
 
 local function read_live_telemetry()
   local ac_api = rawget(_G, "ac")
-  if type(ac_api) ~= "table" then
+  local get_sim = telemetry_member(ac_api, "getSim")
+  local get_car = telemetry_member(ac_api, "getCar")
+  local get_session = telemetry_member(ac_api, "getSession")
+  local sim_attempted, sim_ok, sim, sim_error = false, false, nil, nil
+  local car_attempted, car_ok, car, car_error = false, false, nil, nil
+  local session_attempted, session_ok, session, session_error = false, false, nil, nil
+  local failure = nil
+  local function fail(detail)
+    if failure == nil then failure = detail end
+  end
+
+  if ac_api == nil or (type(ac_api) ~= "table" and type(ac_api) ~= "userdata" and type(ac_api) ~= "cdata") then
+    fail("ac type=" .. type(ac_api))
+  end
+  if not callable(get_sim) then
+    fail("getSim not callable type=" .. type(get_sim))
+  else
+    sim_attempted = true
+    sim_ok, sim, sim_error = telemetry_invoke(get_sim, nil)
+    if not sim_ok then fail("getSim failed: " .. telemetry_safe_text(sim_error)) end
+    if sim_ok and sim == nil then fail("getSim returned nil") end
+  end
+  if not callable(get_car) then
+    fail("getCar not callable type=" .. type(get_car))
+  else
+    car_attempted = true
+    car_ok, car, car_error = telemetry_invoke(get_car, nil, 0)
+    if not car_ok then fail("getCar(0) failed: " .. telemetry_safe_text(car_error)) end
+    if car_ok and car == nil then fail("getCar(0) returned nil") end
+  end
+  if sim_ok and sim ~= nil then
+    if not callable(get_session) then
+      session_error = "missing or non-callable member"
+      fail("getSession not callable type=" .. type(get_session))
+    else
+      local session_index = telemetry_field(sim, "currentSessionIndex") or 0
+      session_attempted = true
+      session_ok, session, session_error = telemetry_invoke(get_session, nil, session_index)
+      if not session_ok then fail("getSession(" .. tostring(session_index) .. ") failed: " .. telemetry_safe_text(session_error)) end
+      if session_ok and session == nil then fail("getSession(" .. tostring(session_index) .. ") returned nil") end
+    end
+  end
+  live_diagnostics.api = {
+    ac_type = type(ac_api),
+    getSim = { member_type = type(get_sim), callable = callable(get_sim), result_type = type(sim), protected_ok = sim_ok, error = sim_error },
+    getCar = { member_type = type(get_car), callable = callable(get_car), result_type = type(car), protected_ok = car_ok, error = car_error },
+    getSession = { member_type = type(get_session), callable = callable(get_session), result_type = type(session), protected_ok = session_ok, error = session_error },
+    car0 = { result_type = type(car), protected_ok = car_ok },
+    sim = { result_type = type(sim), protected_ok = sim_ok },
+    session = { result_type = type(session), protected_ok = session_ok },
+  }
+  if not sim_ok or sim == nil or not car_ok or car == nil then
+    record_live_probe(ac_api, get_sim, sim_attempted, sim_ok, sim, sim_error, get_car, car_attempted, car_ok, car, car_error, get_session, session_attempted, session_ok, session, session_error, failure)
+    live_diagnostics.availability = "unavailable"
     return nil, "SOURCE_UNAVAILABLE"
   end
-  local get_sim = telemetry_field(ac_api, "getSim")
-  local get_car = telemetry_field(ac_api, "getCar")
-  if not callable(get_sim) or not callable(get_car) then
-    return nil, "SOURCE_UNAVAILABLE"
-  end
-  local ok_sim, sim = pcall(get_sim)
-  local ok_car, car = pcall(get_car, 0)
-  if not ok_sim or not ok_car or sim == nil or car == nil then
-    return nil, "SOURCE_UNAVAILABLE"
-  end
+
   local session_index = telemetry_field(sim, "currentSessionIndex") or 0
-  local session = nil
-  local get_session = telemetry_field(ac_api, "getSession")
-  if callable(get_session) then
-    local ok_session, value = pcall(get_session, session_index)
-    if ok_session then session = value end
+  local api_records = {}
+  local function api_value(name, ...)
+    local ok, value, error_value, callback = telemetry_call_api(ac_api, name, ...)
+    api_records[name] = {
+      exists = callback ~= nil,
+      member_type = type(callback),
+      callable = callable(callback),
+      protected_ok = ok,
+      result_type = type(value),
+      error = error_value,
+    }
+    if not callable(callback) then
+      fail(name .. " not callable type=" .. type(callback))
+      return nil
+    end
+    if not ok then
+      fail(name .. " failed: " .. telemetry_safe_text(error_value))
+      return nil
+    end
+    return value
   end
-  local get_track_id = telemetry_field(ac_api, "getTrackID")
-  local get_layout = telemetry_field(ac_api, "getTrackLayout")
-  local get_full_id = telemetry_field(ac_api, "getTrackFullID")
-  local track_id = callable(get_track_id) and select(2, pcall(get_track_id)) or nil
-  local layout_id = callable(get_layout) and select(2, pcall(get_layout)) or nil
-  local full_id = callable(get_full_id) and select(2, pcall(get_full_id, "::")) or nil
-  local car_id = telemetry_optional_method(car, { "id" }) or telemetry_field(car, "id")
-  local car_name = telemetry_optional_method(car, { "name" }) or telemetry_field(car, "name")
-  local driver_name = telemetry_optional_method(car, { "driverName" }) or telemetry_field(car, "driverName")
+  local track_id = api_value("getTrackID")
+  local layout_id = api_value("getTrackLayout")
+  local full_id = api_value("getTrackFullID", "::")
+  local car_id = api_value("getCarID", 0)
+  local car_name = api_value("getCarName", 0)
+  local driver_name = telemetry_field(car, "driverName")
+  local compound = api_value("getTyresName", 0)
   local wheels = telemetry_field(car, "wheels") or {}
   local core_sum, surface_sum, pressure_sum, wear_sum, optimum_sum, wheel_count = 0, 0, 0, 0, 0, 0
   for index = 0, 3 do
-    local wheel = wheels[index] or wheels[index + 1]
+    local wheel = telemetry_index(wheels, index) or telemetry_index(wheels, index + 1)
     if wheel ~= nil then
       local core = telemetry_first(wheel, { "tyreCoreTemperature", "coreTemperature" })
       local surface = telemetry_first(wheel, { "tyreMiddleTemperature", "tyreSurfaceTemperature", "surfaceTemperature" })
@@ -634,9 +881,21 @@ local function read_live_telemetry()
       if core ~= nil or surface ~= nil or pressure ~= nil or wear ~= nil then wheel_count = wheel_count + 1 end
     end
   end
+  local function milliseconds(value)
+    return type(value) == "number" and telemetry_finite(value) and value / 1000 or nil
+  end
   local sim_time_ms = telemetry_field(sim, "time")
-  local sim_time = type(sim_time_ms) == "number" and sim_time_ms / 1000 or telemetry_field(sim, "gameTime")
   local lap_count = telemetry_field(car, "lapCount")
+  local lap_time_ms = telemetry_field(car, "lapTimeMs")
+  local previous_lap_time_ms = telemetry_field(car, "previousLapTimeMs")
+  local best_lap_time_ms = telemetry_field(car, "bestLapTimeMs")
+  local current_session_time_ms = telemetry_field(sim, "currentSessionTime")
+  local session_time_left_ms = telemetry_field(sim, "sessionTimeLeft")
+  local environment_fields = {}
+  for _, name in ipairs({ "ambientTemperature", "roadTemperature", "weatherType", "rainIntensity", "rainWetness", "rainWater", "roadGrip" }) do
+    local member_value = telemetry_member(sim, name)
+    environment_fields[name] = { exists = member_value ~= nil, member_type = type(member_value), value_type = type(telemetry_field(sim, name)) }
+  end
   local raw = {
     source_mode = "live",
     identity = {
@@ -649,8 +908,8 @@ local function read_live_telemetry()
     },
     session = {
       type = telemetry_field(sim, "raceSessionType"),
-      elapsed_s = telemetry_field(sim, "currentSessionTime") and telemetry_field(sim, "currentSessionTime") / 1000 or telemetry_field(sim, "gameTime"),
-      remaining_s = telemetry_field(sim, "sessionTimeLeft") and telemetry_field(sim, "sessionTimeLeft") / 1000 or nil,
+      elapsed_s = milliseconds(current_session_time_ms) or telemetry_field(sim, "gameTime"),
+      remaining_s = milliseconds(session_time_left_ms),
       lap_limit = telemetry_field(session, "laps"),
       track_length_m = telemetry_field(sim, "trackLengthM"),
       completed_laps = lap_count,
@@ -670,20 +929,22 @@ local function read_live_telemetry()
       distance_session_km = telemetry_field(car, "distanceDrivenSessionKm"),
       pit_lane = telemetry_field(car, "isInPitlane"),
       pit_box = telemetry_field(car, "isInPit"),
-      lap_time_s = telemetry_field(car, "lapTimeMs") and telemetry_field(car, "lapTimeMs") / 1000 or nil,
-      previous_lap_time_s = telemetry_field(car, "previousLapTimeMs") and telemetry_field(car, "previousLapTimeMs") / 1000 or nil,
-      best_lap_time_s = telemetry_field(car, "bestLapTimeMs") and telemetry_field(car, "bestLapTimeMs") / 1000 or nil,
+      lap_time_s = milliseconds(lap_time_ms),
+      previous_lap_time_s = milliseconds(previous_lap_time_ms),
+      best_lap_time_s = milliseconds(best_lap_time_ms),
       lap_valid = telemetry_field(car, "isLapValid"),
       previous_lap_valid = telemetry_field(car, "isLastLapValid"),
       last_lap_cuts = telemetry_field(car, "lastLapCutsCount"),
       reset_counter = telemetry_field(car, "resetCounter"),
     },
     tyres = {
-      compound = telemetry_optional_method(car, { "tyresName" }),
+      compound = compound,
       core_c = telemetry_average(core_sum, wheel_count),
       surface_c = telemetry_average(surface_sum, wheel_count),
       wear = telemetry_average(wear_sum, wheel_count),
-      pressure_kpa = telemetry_average(pressure_sum, wheel_count) and telemetry_average(pressure_sum, wheel_count) / 100 or nil,
+      -- StateWheel.tyrePressure is reported in PSI; the normalized contract
+      -- stores kPa for the calculation and view-model layers.
+      pressure_kpa = telemetry_average(pressure_sum, wheel_count) and telemetry_average(pressure_sum, wheel_count) * 6.894757293 or nil,
       optimum_c = telemetry_average(optimum_sum, wheel_count),
     },
     environment = {
@@ -696,14 +957,38 @@ local function read_live_telemetry()
       standing_water = telemetry_field(sim, "rainWater"),
       grip = telemetry_field(sim, "roadGrip"),
     },
-    observed_monotonic_s = sim_time,
+    observed_monotonic_s = type(sim_time_ms) == "number" and sim_time_ms / 1000 or nil,
   }
+  live_diagnostics.identity = raw.identity
+  live_diagnostics.api = {
+    ac = { exists = ac_api ~= nil, member_type = type(ac_api) },
+    ac_type = type(ac_api),
+    getSim = { member_type = type(get_sim), callable = callable(get_sim), result_type = type(sim), protected_ok = sim_ok, error = sim_error },
+    getCar = { member_type = type(get_car), callable = callable(get_car), result_type = type(car), protected_ok = car_ok, error = car_error },
+    getSession = { member_type = type(get_session), callable = callable(get_session), result_type = type(session), protected_ok = session_ok, error = session_error },
+    car0 = { result_type = type(car), protected_ok = car_ok },
+    sim = { result_type = type(sim), protected_ok = sim_ok },
+    session = { result_type = type(session), protected_ok = session_ok },
+    track = { track_id_type = type(track_id), layout_type = type(layout_id), full_id_type = type(full_id) },
+    environment = { ambient_type = type(raw.environment.ambient_c), road_type = type(raw.environment.road_c), weather_type = type(raw.environment.weather_type), rain_type = type(raw.environment.track_wetness) },
+    environment_fields = environment_fields,
+    getTrackID = api_records.getTrackID,
+    getTrackLayout = api_records.getTrackLayout,
+    getTrackFullID = api_records.getTrackFullID,
+    getCarID = api_records.getCarID,
+    getCarName = api_records.getCarName,
+    getTyresName = api_records.getTyresName,
+  }
+  record_live_probe(ac_api, get_sim, sim_attempted, sim_ok, sim, sim_error, get_car, car_attempted, car_ok, car, car_error, get_session, session_attempted, session_ok, session, session_error, failure)
   return raw, nil
 end
 
 function csp.read(source_mode, now_s)
   if source_mode == "mock" then
-    if telemetry_fixture == nil then return nil, "SOURCE_UNAVAILABLE" end
+    if telemetry_fixture == nil then
+      live_diagnostics.availability = "unavailable"
+      return nil, "SOURCE_UNAVAILABLE"
+    end
     return csp.normalize(telemetry_fixture, now_s, "mock")
   end
   if source_mode ~= "live" then return nil, "SOURCE_UNAVAILABLE" end

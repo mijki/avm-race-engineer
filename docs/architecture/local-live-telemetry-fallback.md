@@ -13,8 +13,10 @@ Expanded, or Garage.
 ## Ownership
 
 - adapters/csp.lua is the only live-source adapter. It reads documented
-  ac.getSim(), ac.getCar(0), ac.getSession(), and track identity APIs, then
-  normalizes canonical field names. It never draws.
+  `ac.getSim()`, `ac.getCar(0)`, `ac.getSession(sim.currentSessionIndex)`, and track identity APIs,
+  then normalizes canonical field names. It accepts the installed CSP's
+  LuaJIT `cdata` callable members, protects every live invocation, and never
+  draws.
 - session_identity.lua, lap_tracker.lua, stint_tracker.lua, and sample_store.lua
   own deterministic local state transitions and bounded history. They reset on
   identity, replay, session, lap-counter, or refuel discontinuities.
@@ -27,8 +29,17 @@ Expanded, or Garage.
 ## Source modes
 
 LIVE is the default. MOCK is available only after entering Garage and is
-clearly labelled. RECOVERY represents malformed or unavailable live source
-data and never substitutes mock values.
+clearly labelled. The live availability states are LIVE (complete core),
+PARTIAL (core present with optional gaps), STALE (last valid snapshot retained
+after a read failure), and UNAVAILABLE (no usable core snapshot). Recovery
+represents malformed or unavailable live source data and never substitutes
+mock values.
+
+The adapter keeps a concise, once-only startup probe for `ac`, `getSim`,
+`getCar`, `getSession`, the returned `car0`/`sim`/`session` objects, and the
+first failure. The first rejected normalized field is also retained once.
+These raw diagnostics are exposed only by Garage; race mode receives readable
+source labels and safe unavailable values.
 
 ## Sample policy
 

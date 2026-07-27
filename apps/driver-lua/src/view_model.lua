@@ -52,18 +52,29 @@ function view_model.fallback(mode, reason)
 end
 
 local function live_metric(metric, places)
-  return formatting.metric(metric, places, formatting.reason(metric and metric.reason))
+  if type(metric) == "table" and metric.value ~= nil then
+    return formatting.metric(metric, places, "--")
+  end
+  local reason = metric and metric.reason
+  if reason == "INSUFFICIENT_SAMPLES" then return "Waiting for representative lap" end
+  if reason == "PIT_ENTRY_NOT_CALIBRATED" then return "Pit entry not calibrated" end
+  if reason == "STALE_TELEMETRY" then return "Stale" end
+  return "--"
 end
 
 local function live_duration(metric)
-  if type(metric) ~= "table" or metric.value == nil then
-    return formatting.reason(metric and metric.reason)
+  if type(metric) == "table" and metric.value ~= nil then
+    return formatting.duration(metric.value)
   end
-  return formatting.duration(metric.value)
+  return metric and metric.reason == "INSUFFICIENT_SAMPLES" and "Waiting for representative lap" or "--"
 end
 
 local function live_safe(value)
   return value == nil and "Unavailable" or tostring(value)
+end
+
+local function live_number(value, decimals, suffix)
+  return type(value) == "number" and formatting.number(value, decimals, suffix) or "--"
 end
 
 local function live_reduce(status, mode)
@@ -78,47 +89,70 @@ local function live_reduce(status, mode)
   local current_weather = weather.current or {}
   local future = weather.future or {}
   local diagnostics = status.diagnostics or {}
-  local source = status.source or { mode = "recovery", label = "Recovery" }
+  local source = status.source or { mode = "live", availability = "unavailable", label = "Source unavailable" }
   local alert = status.alerts and status.alerts[1] or nil
-  local state = source.mode == "live" and "live" or source.mode == "mock" and "degraded" or "degraded"
+  local availability = source.availability or (source.mode == "live" and "live" or source.mode == "mock" and "partial" or "unavailable")
+  local state = availability
   local progress_metric = status.stint and status.stint.progress or nil
   local progress = progress_metric and progress_metric.value or nil
-  local source_label = source.label or "Recovery"
-  local source_tone = source.mode == "live" and "good" or source.mode == "mock" and "warning" or "critical"
-  local weather_label = current_weather.weather_type and "CURRENT" or "UNKNOWN"
-  local weather_type = formatting.weather_type(current_weather.weather_type)
-  local weather_condition = type(current_weather.track_wetness) == "number" and (current_weather.track_wetness > 0.08 and "WET" or "DRY") or "UNKNOWN"
-  local connection_age = source.freshness_s and formatting.number(source.freshness_s * 1000, 0, " ms") or "Unavailable"
-  local alert_label = alert and alert.label or "Live measurements only"
+  local source_labels = { live = "LIVE", partial = "PARTIAL", stale = "STALE", unavailable = "OFFLINE", mock = "MOCK" }
+  local source_label = source_labels[availability] or "OFFLINE"
+  local source_tone = availability == "live" and "good" or availability == "stale" and "stale" or availability == "partial" and "warning" or "critical"
+  local weather_label = current_weather.weather_type and "Measured" or "Unknown"
+  local weather_type = current_weather.weather_type and formatting.weather_type(current_weather.weather_type) or "Unknown"
+  local weather_condition = type(current_weather.track_wetness) == "number" and (current_weather.track_wetness > 0.08 and "Wet" or "Dry") or "Unknown"
+  local connection_age = source.freshness_s and formatting.number(source.freshness_s * 1000, 0, " ms") or "--"
+  local alert_label = alert and formatting.reason(alert.label) or "Measured current state"
+  local alert_detail = alert and formatting.reason(alert.reason) or "No live instruction is available."
+  if availability == "unavailable" then
+    alert_label = "Live data unavailable"
+    alert_detail = "Unable to read current CSP car/session telemetry. Open Garage diagnostics for details."
+  elseif availability == "stale" then
+    alert_label = "Live data stale"
+    alert_detail = "The last valid sample is older than the live threshold."
+  elseif availability == "partial" then
+    alert_label = "Live data partial"
+    alert_detail = "Some current telemetry fields are unavailable."
+  elseif alert and alert.kind == "LOW_CONFIDENCE" then
+    alert_label = "Waiting for representative lap"
+    alert_detail = "Current car/session values are measured; model values are still warming up."
+  end
   local pit_metric = status.pit and status.pit.distance or nil
   local pit_reason = status.pit and status.pit.calibration_reason or "PIT_ENTRY_NOT_CALIBRATED"
   local vm = {
     mode = chosen_mode,
-    available = source.mode ~= "recovery",
-    fallback = source.mode == "recovery",
+    available = availability ~= "unavailable",
+    fallback = availability == "unavailable",
     fallback_reason = formatting.reason(source.error),
     product_name = namespace.config.product_name,
     build_name = namespace.config.build_name,
     session_name = formatting.session_type(session.type),
     scenario_id = source.mode == "mock" and "MOCK" or "LIVE",
-    lap = session.current_lap and ("" .. tostring(session.current_lap)) or "UNAVAILABLE",
-    planned_lap = session.lap_limit and ("" .. tostring(session.lap_limit)) or "UNAVAILABLE",
+    lap = session.current_lap and ("" .. tostring(session.current_lap)) or "--",
+    planned_lap = session.lap_limit and ("" .. tostring(session.lap_limit)) or "--",
     stint = live_metric(status.stint and status.stint.completed_laps, 0),
-    total_stints = "UNAVAILABLE",
+    total_stints = "--",
     progress = progress or 0,
     connection_state = state,
-    connection_tone = state == "live" and "live" or "degraded",
+    connection_tone = state == "live" and "live" or state == "stale" and "stale" or state == "partial" and "degraded" or "offline",
     confidence = formatting.confidence(fuel.per_lap and fuel.per_lap.confidence_band),
     confidence_tone = fuel.per_lap and fuel.per_lap.confidence_band == "high" and "good" or "warning",
+    source = {
+      availability = availability,
+      state = source_label,
+      label = source_label,
+      detail = alert_detail,
+      error = source.error,
+    },
     alert = {
       text = alert_label,
-      detail = alert and (alert.reason or "Measured local state") or "No live instruction is available",
-      priority = alert and (alert.priority and alert.priority <= 2 and "high" or "normal") or "low",
-      tone = alert and alert.priority and alert.priority <= 2 and "warning" or "info",
+      detail = alert_detail,
+      priority = availability == "unavailable" and "high" or alert and (alert.priority and alert.priority <= 2 and "high" or "normal") or "low",
+      tone = availability == "unavailable" and "critical" or alert and alert.priority and alert.priority <= 2 and "warning" or "info",
       requires_acknowledgement = false,
       alert_id = alert and alert.kind or "live-measurements",
       family = "live_measurements",
-      status = "VISIBLE",
+      status = source_label,
     },
     timing = {
       elapsed = live_duration(status.stint and status.stint.elapsed),
@@ -131,11 +165,11 @@ local function live_reduce(status, mode)
       current = live_metric(fuel.current, 1),
       range = live_metric(fuel.laps_remaining, 1),
       distance_to_pit = live_metric(pit_metric, 0),
-      pit_route = "Unavailable",
+      pit_route = "--",
       expected_at_pit = live_metric(fuel.predicted_at_pit, 1),
       delta = live_metric(fuel.delta_target, 1),
-      required_saving = "Unavailable",
-      next_stop = "Unavailable",
+      required_saving = "--",
+      next_stop = "--",
       used = live_metric(fuel.used_stint, 1),
       per_lap = live_metric(fuel.per_lap, 2),
       per_km = live_metric(fuel.per_km, 2),
@@ -144,35 +178,35 @@ local function live_reduce(status, mode)
       pit_reason = formatting.reason(pit_reason),
       predicted_metric = fuel.predicted_at_pit,
       target_delta = live_metric(fuel.delta_target, 1),
-      status = alert and alert.kind or "MEASURED RANGE",
+      status = availability == "unavailable" and "--" or alert and alert.kind == "SAVE_FUEL" and "SAVE FUEL" or "Measured range",
     },
     pace = {
       delta = live_metric(pace.delta, 2),
       delta_metric = pace.delta,
-      status = pace.delta and pace.delta.value and pace.delta.value > 0.5 and "OFF TARGET" or "REPRESENTATIVE PACE",
+      status = availability == "unavailable" and "--" or pace.delta and pace.delta.value and pace.delta.value > 0.5 and "Off target" or pace.delta and pace.delta.value and "On target" or "Waiting for representative lap",
       last_lap = live_metric(pace.current, 3),
-      trend = "measured",
+      trend = formatting.confidence(pace.rolling and pace.rolling.confidence_band),
       trend_values = {},
       current = live_metric(pace.current, 3),
       rolling = live_metric(pace.rolling, 3),
       confidence = formatting.confidence(pace.rolling and pace.rolling.confidence_band),
     },
     tyres = {
-      compound = formatting.weather_type(tyres.compound),
+      compound = tyres.compound and formatting.weather_type(tyres.compound) or "--",
       wear = live_metric(tyres.wear, 0),
-      condition = formatting.readable_tyre_state(tyres.state),
-      state = formatting.readable_tyre_state(tyres.state),
+      condition = tyres.state and formatting.readable_tyre_state(tyres.state) or "Unknown",
+      state = tyres.state and formatting.readable_tyre_state(tyres.state) or "Unknown",
       temperature = live_metric(tyres.core_c, 0) .. " / " .. live_metric(tyres.surface_c, 0),
       color_tone = tyres.state == "OPTIMAL" and "good" or "warning",
-      color = theme and theme.tone and theme.tone("warning") or nil,
+      color = nil,
     },
     pit = {
       window = live_metric(pit_metric, 0),
-      recommendation = alert and alert.label or formatting.reason(pit_reason),
-      next_fuel = "Unavailable",
-      next_tyres = "Unavailable",
-      service = "Unavailable",
-      state = pit_metric and "measured" or "unknown",
+      recommendation = availability == "unavailable" and "--" or alert and formatting.reason(alert.label) or formatting.reason(pit_reason),
+      next_fuel = "--",
+      next_tyres = "--",
+      service = "--",
+      state = pit_metric and "Measured" or "Unknown",
       box_in_laps = nil,
     },
     weather = {
@@ -180,37 +214,37 @@ local function live_reduce(status, mode)
       current = weather_type,
       condition = weather_condition,
       next_change = future.text or "No reliable future forecast",
-      eta = "NO ETA",
-      source = current_weather.source or "CSP MEASURED CURRENT",
-      confidence = "High confidence",
+      eta = "No ETA",
+      source = current_weather.source or "Measured now",
+      confidence = availability == "live" and "High confidence" or "Unknown",
       implication = "No forecast promise",
-      crossover = "NO TYRE CROSSOVER SIGNAL",
+      crossover = "No tyre crossover signal",
       authoritative = future.authoritative == true,
-      temperatures = "Air " .. formatting.number(current_weather.ambient_c, 0, " °C") .. "  Road " .. formatting.number(current_weather.road_c, 0, " °C"),
-      track = "Grip " .. formatting.number(current_weather.grip, 2, "") .. "  Wet " .. formatting.number(current_weather.track_wetness and current_weather.track_wetness * 100, 0, "%"),
-      trend = weather.trend and weather.trend.text or "Measured trend: Unavailable",
+      temperatures = "Air " .. live_number(current_weather.ambient_c, 0, " C") .. "  Road " .. live_number(current_weather.road_c, 0, " C"),
+      track = "Grip " .. live_number(current_weather.grip, 2, "") .. "  Wet " .. live_number(current_weather.track_wetness and current_weather.track_wetness * 100, 0, "%"),
+      trend = weather.trend and weather.trend.text or "Trend unavailable",
       future = future.text or "No reliable future forecast",
       timeline = {},
     },
     connections = {
-      engineer = "LOCAL ONLY",
-      bridge = source.mode == "live" and "CSP LIVE" or source.mode == "mock" and "MOCK DIAGNOSTICS" or "SOURCE UNAVAILABLE",
+      engineer = "Local only",
+      bridge = availability == "live" and "Local CSP" or availability == "partial" and "Partial CSP" or availability == "stale" and "Stale CSP" or "Unavailable",
       telemetry = connection_age,
       source = source_label,
     },
     header = {
       session = formatting.session_type(session.type),
-      lap = session.current_lap and ("Lap " .. tostring(session.current_lap)) or "Lap unavailable",
-      position = session.position and (tostring(session.position) .. "/" .. tostring(session.total_cars or "?")) or "Unavailable",
+      lap = session.current_lap and ("Lap " .. tostring(session.current_lap)) or "Lap --",
+      position = session.position and (tostring(session.position) .. "/" .. tostring(session.total_cars or "?")) or "--",
       source = source_label,
       source_mode = source.mode,
       source_tone = source_tone,
     },
     raw = {
-      speed = formatting.number(status.car and status.car.speed_kmh, 0, " km/h"),
-      spline = formatting.number(status.car and status.car.spline, 3, ""),
-      pit_lane = status.car and (status.car.pit_lane and "Yes" or "No") or "Unavailable",
-      pit_box = status.car and (status.car.pit_box and "Yes" or "No") or "Unavailable",
+      speed = live_number(status.car and status.car.speed_kmh, 0, " km/h"),
+      spline = live_number(status.car and status.car.spline, 3, ""),
+      pit_lane = status.car and (status.car.pit_lane == nil and "Unavailable" or status.car.pit_lane and "Yes" or "No") or "Unavailable",
+      pit_box = status.car and (status.car.pit_box == nil and "Unavailable" or status.car.pit_box and "Yes" or "No") or "Unavailable",
     },
     diagnostics = {
       samples_laps = diagnostics.sample_summary and diagnostics.sample_summary.laps or 0,
@@ -218,8 +252,18 @@ local function live_reduce(status, mode)
       samples_pace = diagnostics.sample_summary and diagnostics.sample_summary.pace or 0,
       samples_weather = diagnostics.sample_summary and diagnostics.sample_summary.weather or 0,
       regime = live_safe(diagnostics.current_regime),
-      freshness = source.freshness_s and formatting.number(source.freshness_s, 1, " s") or "Unavailable",
-      source_error = diagnostics.source_error,
+      freshness = source.freshness_s and formatting.number(source.freshness_s, 1, " s") or "--",
+      update_age = source.diagnostics and source.diagnostics.update_age_s and formatting.number(source.diagnostics.update_age_s, 1, " s") or "--",
+      source_error = source.error or diagnostics.source_error,
+      first_failure = source.diagnostics and source.diagnostics.first_failure or source.error,
+      probe = source.diagnostics and source.diagnostics.probe or "Unavailable",
+      normalization_rejection = source.diagnostics and source.diagnostics.first_normalization_rejection or "None",
+      api = source.diagnostics and source.diagnostics.api or {},
+      core_valid = source.diagnostics and source.diagnostics.normalized_core and source.diagnostics.normalized_core.valid or false,
+      core_missing = source.diagnostics and source.diagnostics.normalized_core and source.diagnostics.normalized_core.missing or {},
+      optional_missing = source.diagnostics and source.diagnostics.optional_missing or {},
+      identity = identity,
+      last_reset_reason = diagnostics.last_reset_reason,
       raw = diagnostics.raw,
     },
     calibration = {

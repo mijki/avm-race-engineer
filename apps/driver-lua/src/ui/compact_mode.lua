@@ -2,54 +2,80 @@ local namespace = _G.AVM_PITWALL_F1
 local csp = namespace.adapters.csp
 local theme = namespace.ui.theme
 local components = namespace.ui.components
-local icons = namespace.ui.icons
 local compact = {}
 
-local function row(box, label, value, offset, tone, icon)
-  components.status_line(label, value, box.x + 10, box.y + offset, box.width - 20, tone, icon)
+local function metric(box, label, value, x, y, width, tone)
+  components.label(label, x, y, theme.color("muted"))
+  components.safe_text(value or "--", x, y + 14, width, theme.tone(tone or "info"))
+end
+
+local function card_metrics(box, title, icon, tone, left, right)
+  components.card(box, title, icon, tone)
+  local inner_x = box.x + 10
+  local inner_width = box.width - 20
+  local column_width = (inner_width - 10) / 2
+  local first_y = box.y + 31
+  local second_y = box.y + math.min(68, math.max(58, box.height - 38))
+  if box.height >= 70 then
+    metric(box, left[1], left[2], inner_x, first_y, column_width, left[3])
+    metric(box, right[1], right[2], inner_x + column_width + 10, first_y, column_width, right[3])
+  end
+  if box.height >= 96 then
+    metric(box, left[4], left[5], inner_x, second_y, column_width, left[6])
+    metric(box, right[4], right[5], inner_x + column_width + 10, second_y, column_width, right[6])
+  end
 end
 
 function compact.render(vm, boxes)
+  local header = boxes.header
+  components.card(header, "AVM PitWall", nil, vm.header.source_tone)
+  components.safe_text(vm.header.session .. "  " .. vm.header.lap, header.x + 108, header.y + 9, header.width - 198, theme.color("muted"))
+  components.badge(vm.header.source, header.x + header.width - 78, header.y + 4, 70, vm.header.source_tone)
+
   local fuel = boxes.cards.fuel
-  components.card(fuel, "FUEL", "fuel", vm.connection_tone == "stale" and "stale" or "good")
-  row(fuel, "FUEL RANGE", vm.fuel.range, 32, "good", "distance")
-  row(fuel, "FUEL", vm.fuel.current, 54, "info")
-  row(fuel, "EXPECTED AT PIT ENTRY", vm.fuel.expected_at_pit, 76, "info", "pit_entry")
-  components.label("DISTANCE TO PIT ENTRY", fuel.x + 10, fuel.y + fuel.height - 29, theme.color("muted"))
-  components.value(vm.fuel.distance_to_pit, fuel.x + fuel.width * 0.58, fuel.y + fuel.height - 29, theme.color("text"))
+  card_metrics(fuel, "FUEL", "fuel", "good", {
+    "CURRENT", vm.fuel.current, "info", "PIT ENTRY", vm.fuel.distance_to_pit, "muted",
+  }, {
+    "RANGE", vm.fuel.range, "good", "AT ENTRY", vm.fuel.expected_at_pit, "info",
+  })
 
   local pace = boxes.cards.pace
-  components.card(pace, "PACE", "pace", vm.pace.status == "PUSH" and "good" or "info")
-  row(pace, "TARGET PACE", vm.pace.delta, 32, "info")
-  row(pace, "STATUS", vm.pace.status, 54, vm.pace.status == "SAVE" and "warning" or "good")
-  row(pace, "LAST LAP", vm.pace.last_lap, 76, "text")
-  components.badge(string.upper(vm.pace.trend), pace.x + pace.width - 86, pace.y + 8, 76, "info")
-
-  local tyres = boxes.cards.tyres
-  components.card(tyres, "TYRES", "tyres", "good")
-  row(tyres, "COMPOUND", vm.tyres.compound, 32, "good")
-  row(tyres, "WEAR", vm.tyres.wear, 54, "info")
-  row(tyres, "CONDITION", vm.tyres.condition, 76, vm.tyres.condition == "GOOD" and "good" or "warning")
-  components.value(vm.tyres.temperature, tyres.x + 10, tyres.y + tyres.height - 29, theme.color("muted"))
+  card_metrics(pace, "PACE", "pace", "info", {
+    "CURRENT", vm.pace.last_lap, "text", "STATUS", vm.pace.status, "good",
+  }, {
+    "DELTA", vm.pace.delta, "info", "CONFIDENCE", vm.pace.confidence, "muted",
+  })
 
   local pit = boxes.cards.pit
-  components.card(pit, "PIT STRATEGY", "pit", vm.pit.state == "box_now" and "critical" or "warning")
-  row(pit, "PIT WINDOW", vm.pit.window, 32, "warning")
-  row(pit, "CALL", vm.pit.recommendation, 54, vm.pit.state == "box_now" and "critical" or "warning")
-  row(pit, "NEXT STOP", vm.pit.next_fuel, 76, "info")
-  components.value("TYRES " .. vm.pit.next_tyres, pit.x + 10, pit.y + pit.height - 29, theme.color("text"))
+  card_metrics(pit, "PIT", "pit", "warning", {
+    "DISTANCE", vm.pit.window, "warning", "CALL", vm.pit.recommendation, "warning",
+  }, {
+    "ENTRY", vm.fuel.distance_to_pit, "info", "STATE", vm.pit.state, "muted",
+  })
+
+  local tyres = boxes.cards.tyres
+  card_metrics(tyres, "TYRES", "tyres", "good", {
+    "COMPOUND", vm.tyres.compound, "good", "WEAR", vm.tyres.wear, "info",
+  }, {
+    "TEMP", vm.tyres.temperature, "info", "STATE", vm.tyres.condition, "muted",
+  })
 
   local weather = boxes.cards.weather
-  components.card(weather, "WEATHER", "dry", vm.weather.label == "STALE" and "stale" or vm.weather.label == "UNKNOWN" and "warning" or "info")
-  icons.draw(vm.weather.label == "SCHEDULED" and "heavy_rain" or vm.weather.label == "ESTIMATED" and "light_rain" or "dry", weather.x + weather.width - 34, weather.y + 8, 20, theme.tone(vm.weather.label == "ESTIMATED" and "warning" or "info"))
-  components.value(vm.weather.label .. "  " .. vm.weather.current .. "  " .. vm.weather.condition, weather.x + 10, weather.y + 31, theme.color("text"))
-  components.value(vm.weather.next_change .. "  " .. vm.weather.eta, weather.x + 10, weather.y + 49, theme.tone(vm.weather.label == "UNKNOWN" or vm.weather.label == "STALE" and "warning" or "info"))
-  components.label(vm.weather.source .. "  |  " .. vm.weather.confidence, weather.x + weather.width - 190, weather.y + 49, theme.color("muted"))
+  card_metrics(weather, "WEATHER", "dry", "info", {
+    "CURRENT", vm.weather.current, "text", "TRACK", vm.weather.condition, "info",
+  }, {
+    "AIR / ROAD", vm.weather.temperatures, "muted", "WETNESS", vm.weather.track, "muted",
+  })
+
+  local status = boxes.cards.engineer or boxes.footer
+  components.card(status, "ENGINEER", nil, vm.alert.tone)
+  components.safe_text(vm.alert.text, status.x + 78, status.y + 4, status.width * 0.34, theme.tone(vm.alert.tone))
+  components.safe_text(vm.alert.detail, status.x + status.width * 0.46, status.y + 4, status.width * 0.50, theme.color("muted"))
 end
 
 local function value(value, fallback)
   local text = tostring(value or "")
-  return text == "" and (fallback or "UNAVAILABLE") or text
+  return text == "" and (fallback or "--") or text
 end
 
 function compact.render_text_first(vm, requested_mode, simplified)
@@ -68,6 +94,7 @@ function compact.render_text_first(vm, requested_mode, simplified)
   csp.text("FUEL: DISTANCE TO PIT ENTRY: " .. value(vm.fuel.distance_to_pit) .. "    PIT ROUTE: " .. value(vm.fuel.pit_route))
   csp.text("FUEL: EXPECTED AT PIT ENTRY: " .. value(vm.fuel.expected_at_pit))
   csp.text("PACE: STATUS: " .. value(vm.pace.status) .. "    DELTA: " .. value(vm.pace.delta))
+  csp.text("PACE: TARGET PACE: " .. value(vm.pace.delta) .. "    LAST LAP: " .. value(vm.pace.last_lap))
   csp.text("TYRES: COMPOUND: " .. value(vm.tyres.compound) .. "    CONDITION: " .. value(vm.tyres.condition))
   csp.text("WEATHER: CURRENT: " .. value(vm.weather.current) .. " / " .. value(vm.weather.condition))
   csp.text("NEXT WEATHER: " .. value(vm.weather.next_change) .. "    ETA: " .. value(vm.weather.eta))

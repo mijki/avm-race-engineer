@@ -72,18 +72,54 @@ class F1RendererVisibilityTests(unittest.TestCase):
     def test_callable_members_and_constructors_are_not_function_only(self) -> None:
         for source in (self.csp, self.bootstrap):
             self.assertIn('value_type == "userdata"', source)
+            self.assertIn('value_type == "cdata"', source)
             self.assertIn("metatable.__call", source)
         self.assertIn('construct("vec2"', self.csp)
         self.assertIn('construct("rgbm"', self.csp)
         self.assertIn("unsupported vector constructor", self.csp)
 
     def test_window_and_layout_fallbacks_are_explicit(self) -> None:
-        self.assertLess(self.csp.index('call_ui("availableSpace")'), self.csp.index('call_ui("windowSize")'))
+        self.assertLess(self.csp.index('read_ui_member("availableSpace")'), self.csp.index('read_ui_member("windowSize")'))
+        self.assertIn('return "value", candidate, nil', self.csp)
         self.assertIn('return 780, 380, "fallback"', self.csp)
         self.assertIn('function layout.valid', self.layout)
         self.assertIn('runtime.layout_strategy', self.app)
         self.assertIn('"flow layout selected"', self.app)
         self.assertIn("invalid or off-screen bounds", self.app)
+
+    def test_live_csp_probe_supports_documented_callables_and_field_values(self) -> None:
+        self.assertIn('local get_sim = telemetry_member(ac_api, "getSim")', self.csp)
+        self.assertIn('local get_car = telemetry_member(ac_api, "getCar")', self.csp)
+        self.assertIn('local get_session = telemetry_member(ac_api, "getSession")', self.csp)
+        self.assertIn('api_value("getTyresName", 0)', self.csp)
+        self.assertIn('AVM F1 live source probe:', self.csp)
+        self.assertIn('AVM F1 live normalization rejected:', self.csp)
+        self.assertIn('runtime.log_once("live_source_probe_logged"', self.csp)
+        self.assertIn('runtime.log_once("live_normalization_rejected_logged"', self.csp)
+        self.assertEqual(self.csp.count('runtime.log_once("live_source_probe_logged"'), 1)
+        self.assertEqual(self.csp.count('runtime.log_once("live_normalization_rejected_logged"'), 1)
+        self.assertIn('if #text > 120 then', self.csp)
+
+    def test_compact_layout_has_one_bounded_geometry_model(self) -> None:
+        for label in ("result.cards.fuel", "result.cards.pace", "result.cards.pit", "result.cards.tyres", "result.cards.weather", "result.cards.engineer"):
+            self.assertIn(label, self.layout)
+        self.assertIn('result.banner = result.footer', self.layout)
+        self.assertIn('components.badge(vm.header.source', self.compact)
+        self.assertIn('components.card(status, "ENGINEER"', self.compact)
+
+    def test_compact_renderer_uses_explicit_rows_and_bounded_values(self) -> None:
+        self.assertIn('local first_y = box.y + 31', self.compact)
+        self.assertIn('local second_y = box.y + math.min(68, math.max(58, box.height - 38))', self.compact)
+        self.assertIn('if box.height >= 96 then', self.compact)
+        self.assertIn('components.safe_text(value or "--"', self.compact)
+        self.assertIn('function csp.text_aligned(value, x, y, width', self.csp)
+        self.assertNotIn('Live source unavailable', self.compact)
+
+    def test_expanded_rows_and_shared_safe_text_guard_long_values(self) -> None:
+        components = (SRC / "ui" / "components.lua").read_text(encoding="utf-8")
+        self.assertIn('local max_chars = math.max(1, math.floor(width / 7))', components)
+        self.assertIn('safe = string.sub(safe, 1, keep) .. "..."', components)
+        self.assertIn('components.safe_text(value or "--", box.x + 10, y + 15', self.expanded)
 
     def test_invalid_alpha_and_clip_failures_do_not_silently_draw(self) -> None:
         self.assertIn("alpha > 0", self.csp)

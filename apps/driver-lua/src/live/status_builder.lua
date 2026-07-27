@@ -24,13 +24,23 @@ do
     local session = snapshot.session or {}
     local car = snapshot.car or {}
     local weather = calculation.weather.current or {}
+    local availability = state.source_availability or "unavailable"
+    local source_labels = {
+      live = "Live",
+      partial = "Partial live",
+      stale = "Stale live",
+      unavailable = "Source unavailable",
+      mock = "Garage mock",
+    }
     local result = {
       schema_version = "driver-status-local-f2",
       source = {
         mode = state.source_mode,
-        label = state.source_mode == "live" and "Live telemetry" or "Mock diagnostics",
+        availability = availability,
+        label = source_labels[availability] or source_labels.unavailable,
         error = state.source_error,
         freshness_s = calculation.freshness_s,
+        diagnostics = state.source_diagnostics,
       },
       identity = contracts.identity(snapshot),
       session = {
@@ -74,6 +84,9 @@ do
         calibration = state.calibration,
         raw = snapshot,
         source_error = state.source_error,
+        source_availability = availability,
+        source_diagnostics = state.source_diagnostics,
+        last_reset_reason = state.last_reset_reason,
       },
       trace = {},
       updated_s = now_s,
@@ -89,9 +102,10 @@ do
 
   function status_builder.recovery(source_mode, reason, state)
     local unavailable = contracts.unavailable("", reason or "SOURCE_UNAVAILABLE", 0, nil)
+    local source_diagnostics = state and state.source_diagnostics or nil
     return {
       schema_version = "driver-status-local-f2",
-      source = { mode = "recovery", requested_mode = source_mode, label = "Recovery", error = reason, freshness_s = nil },
+      source = { mode = source_mode or "live", availability = "unavailable", requested_mode = source_mode, label = "Source unavailable", error = reason, freshness_s = nil, diagnostics = source_diagnostics },
       identity = {},
       session = {}, car = {},
       stint = { elapsed = unavailable, completed_laps = unavailable, remaining = unavailable, endpoint = unavailable, progress = unavailable },
@@ -100,8 +114,8 @@ do
       tyres = { compound = nil, core_c = unavailable, surface_c = unavailable, wear = unavailable, pressure_kpa = unavailable, state = "UNKNOWN" },
       weather = { current = {}, trend = { label = "UNKNOWN", text = "Measured trend: Unavailable" }, future = namespace.live.weather.future() },
       pit = { distance = unavailable, calibrated = false, calibration_reason = reason },
-      alerts = { { kind = "LOW_CONFIDENCE", label = "LIVE SOURCE UNAVAILABLE", priority = 2, reason = reason } },
-      diagnostics = { sample_summary = state and namespace.live.sample_store.summary(state.samples) or {}, current_regime = "unknown", raw = nil, source_error = reason },
+      alerts = { { kind = "SOURCE_UNAVAILABLE", label = "LIVE DATA UNAVAILABLE", priority = 2, reason = reason } },
+      diagnostics = { sample_summary = state and namespace.live.sample_store.summary(state.samples) or {}, current_regime = "unknown", raw = nil, source_error = reason, source_availability = "unavailable", source_diagnostics = source_diagnostics, last_reset_reason = state and state.last_reset_reason or nil },
       trace = {},
       updated_s = nil,
     }

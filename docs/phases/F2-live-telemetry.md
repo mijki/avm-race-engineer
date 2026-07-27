@@ -16,7 +16,9 @@ glanceable AVM PitWall interface.
   calibration modules.
 - Fuel, pace, stint, tyre, current-weather, confidence, and unavailable-state
   calculations.
-- Explicit LIVE, MOCK, and RECOVERY source modes.
+- Explicit LIVE and Garage-only MOCK source modes, with LIVE/PARTIAL/STALE/
+  UNAVAILABLE availability states and no mock substitution during read
+  failure.
 - Compact, Expanded, and Garage/Diagnostics renderers with no race-mode scroll.
 - Deterministic bundle and installer guards, static scans, and host regression
   coverage.
@@ -36,7 +38,9 @@ interactive CSP rendering remain pending manual gates.
 
 ## Real CSP gate
 
-Deploy only to apps/lua/AVM_PitWall_F1. Verify LIVE source, dynamic fuel/lap/
-stint values, completed-lap sample growth, pit calibration, current weather,
-tyres, three modes, no overlap, no stale initialization shell, and no mock
-substitution. Do not report this gate as passed without interactive evidence.
+Deploy only to `apps/lua/AVM_PitWall_F1`. Verify the source probe and API
+diagnostics, LIVE/PARTIAL source state, dynamic fuel/speed/lap/stint values,
+completed-lap sample growth, pit calibration, current weather, tyres, three
+modes, the bounded 3+2 Compact card layout, no overlap or clipping, no stale
+initialization shell, and no mock substitution. Do not report this gate as
+passed without interactive evidence.

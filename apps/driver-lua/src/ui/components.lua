@@ -35,7 +35,7 @@ function components.badge(text, x, y, width, tone)
   if csp.has("drawRect") then
     csp.outline(x, y, width, 20, color, 5, 1)
   end
-  csp.text_aligned(text, x + 5, y + 3, width - 10, color)
+  csp.text_aligned(text, x + 5, y + 3, width - 10, color, 16)
 end
 
 function components.metric(label, value, x, y, width, tone)
@@ -87,7 +87,15 @@ function components.section_title(text, box, tone)
 end
 
 function components.safe_text(text, x, y, width, color)
-  csp.text_aligned(text or "UNAVAILABLE", x, y, width, color or theme.color("text"))
+  local safe = tostring(text or "UNAVAILABLE")
+  if type(width) == "number" and width > 0 then
+    local max_chars = math.max(1, math.floor(width / 7))
+    if #safe > max_chars then
+      local keep = math.max(1, max_chars - 3)
+      safe = string.sub(safe, 1, keep) .. "..."
+    end
+  end
+  csp.text_aligned(safe, x, y, width, color or theme.color("text"))
 end
 
 namespace.ui.components = components

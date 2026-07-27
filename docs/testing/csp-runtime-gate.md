@@ -203,12 +203,51 @@ and CSP result. A host-only run must leave the F1 status runtime-pending.
 ## F2 live-driver evidence
 
 The F2 host gate additionally checks two deliberately different telemetry
-fixtures, explicit LIVE/MOCK/RECOVERY source ownership, no renderer race
-literal scan, normalized CSP field coverage, bounded samples, pit-entry
-calibration equations, measured-weather-only output, and deterministic bundle
-hashing. The real gate remains open until interactive Assetto Corsa evidence is
-recorded; host checks cannot prove that fuel, lap, stint, tyre, and weather
-values update in a running session.
+fixtures, explicit LIVE/Garage-only MOCK source ownership, LIVE/PARTIAL/STALE/
+UNAVAILABLE availability, no renderer race literal scan, normalized CSP field
+coverage, bounded samples, pit-entry calibration equations,
+measured-weather-only output, and deterministic bundle hashing. The real gate
+remains open until interactive Assetto Corsa evidence is recorded; host checks
+cannot prove that fuel, lap, stint, tyre, and weather values update in a
+running session.
+
+### 2026-07-27 real-CSP retest and correction note
+
+The operator's current interactive retest reached the installed F1 bundle and
+showed the AVM PitWall window and enhanced cards, but it did not prove a live
+telemetry sample. The visible race metrics reported `Live data unavailable`,
+the compact layout had a large unused top region, and the lower status/badge
+copy was clipped or overlapped. The current CSP log also records the F1 app
+loading, callback registration, first window entry, and enhanced draw evidence;
+its API-type line reports `ui.separator`, `ui.availableSpace`, and
+`ui.windowSize` as LuaJIT `cdata`. The old adapter treated those members as
+non-callable, and the old live adapter discarded `getSim`, `getCar`, and
+`getSession` because its field helper rejected Lua functions before invocation.
+
+The installed SDK and read-only reference apps confirm the required live path:
+`ac.getSim()`, `ac.getCar(0)`, `ac.getSession(sim.currentSessionIndex)`,
+`ac.getTyresName(0)`, `ac.getTrackID()`, and `ac.getTrackLayout()`, with state
+fields for fuel, speed, lap count/times, spline, pit lane, session timing,
+ambient/road temperature, weather, and rain wetness. The correction therefore
+keeps acquisition behind the CSP adapter, accepts callable cdata/userdata/table
+members, records one bounded source probe and first normalization rejection,
+and makes optional fields field-level unavailable. Compact geometry now uses a
+single bounded header/primary/secondary/status model for the 700x300,
+800x408, and 900x450 checks. Garage is the only surface that exposes raw API
+types, exact failures, normalized-core gaps, optional gaps, age, identity,
+sample counts, reset reason, renderer owner, and layout dimensions.
+
+This remains `host-complete; runtime-pending`. Do not mark the gate passed until
+a subsequent real CSP run with the corrected installed bundle visibly proves:
+
+1. fuel and speed change with the car, lap/session identity and lap count are
+   correct, and the live probe reports the expected runtime types/results;
+2. partial and stale states remain distinct without silently selecting a mock
+   fixture;
+3. Compact, Expanded, and Garage show no overlap or clipping at the documented
+   sizes, including a fully readable source badge/footer; and
+4. race modes contain readable user copy only, while raw API names and reason
+   codes remain confined to Garage diagnostics.
 
 ## Related Documents
 

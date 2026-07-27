@@ -107,12 +107,12 @@ function state.set_mode(mode)
   return true
 end
 
-function state.set_source_mode(value)
-  if state.mode ~= "garage" then return false end
+function state.set_source_mode(self, value)
+  if self.mode ~= "garage" then return false end
   if value ~= "live" then return false end
   set_live_source()
-  state.latest_status = nil
-  state.view_models = {}
+  self.latest_status = nil
+  self.view_models = {}
   return true
 end
 

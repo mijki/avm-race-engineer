@@ -68,10 +68,13 @@ function formatting.signed(value, unit, fallback)
 end
 
 function formatting.confidence(band)
-  if type(band) ~= "string" then
-    return "UNKNOWN"
-  end
-  return string.upper(band:gsub("_", " "))
+  local labels = {
+    high = "High confidence",
+    medium = "Medium confidence",
+    low = "Low confidence",
+    stale = "Stale",
+  }
+  return labels[band] or "Unknown"
 end
 
 function formatting.eta(lower, upper, fallback)
@@ -111,7 +114,9 @@ function formatting.reason(reason)
     NO_TRUSTWORTHY_CONSTRAINT = "No trustworthy constraint",
     NO_TRUSTWORTHY_FUTURE_CHANGE = "No reliable future forecast",
     LOW_CONFIDENCE = "Low confidence",
-    INSUFFICIENT_SAMPLES = "Waiting for representative laps",
+    INSUFFICIENT_SAMPLES = "Waiting for representative lap",
+    SOURCE_PARTIAL = "Some live fields unavailable",
+    SOURCE_STALE = "Live data is stale",
     PIT_ENTRY_NOT_CALIBRATED = "Pit entry not calibrated",
     PIT_ENTRY_WRAPAROUND_APPLIED = "Pit entry after start/finish",
     STALE_TELEMETRY = "Live telemetry is stale",
