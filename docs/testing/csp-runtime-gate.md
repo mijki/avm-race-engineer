@@ -86,6 +86,45 @@ and `app.windowMain()` drawing an initialization canary. Bootstrap is now the
 single shell owner; both callback aliases delegate to that shared entrypoint,
 which resets a per-frame guard and emits the shell once.
 
+### F1 renderer visibility correction
+
+The latest pre-correction deterministic bundle was deployed to the separate F1 development
+target and reached every application stage in real CSP. The window still
+showed only the direct native shell (`AVM PitWall`, `F1 runtime active`, and
+the initialization line), even though the enhanced renderer logged
+`full mode rendered`. That log was only proof that the renderer returned from
+Lua without an exception; it was not proof of a visible draw operation.
+
+The corrected adapter now returns `drawn`, `degraded`, `unavailable`, or
+`failed` based on the protected underlying CSP call. It validates bounds,
+alpha, vectors, colors, and callable members, records skipped-operation
+reasons, and never reports a draw when no CSP member was invoked. Callable
+userdata and callable tables are accepted in addition to Lua functions. The
+installed SDK confirms that `ui.text()` is the safest generic-app baseline,
+while `ui.availableSpace()` is preferred for content sizing, followed by
+available-space axis methods, `ui.windowSize()`, and finally a conservative
+780x380 flow fallback.
+
+Every callback now resets bounded frame-local evidence for native shell draws,
+mode text, enhanced primitives, degraded fallback, skipped operations, and
+the first skip reason. The first attempt logs one `AVM F1 render evidence:`
+record. `full mode rendered` is emitted only when mode text, enhanced output,
+or a visible degraded fallback was recorded.
+
+Compact Mode always emits a direct `ui.text()` flow renderer containing the
+fixture's stint, lap, timing, fuel, pace, tyres, weather, engineer, and
+connection values. Expanded and Garage/Diagnostics have the same text-first
+guarantee. Enhanced cards are attempted only after valid size/layout checks;
+zero-operation or invalid enhanced rendering immediately leaves the text-first
+body visible. The initialization line is emitted only before a mode-specific
+body has succeeded and is not repeated after successful mode rendering.
+
+Current correction status remains `host-complete; runtime-pending`: the
+original real-CSP result established the invisible-body defect, but this
+environment cannot perform the required post-correction CSP screenshot for
+Compact, Expanded, and Garage. The package must not be promoted to
+runtime-validated until those three mode bodies are visibly confirmed.
+
 Host-side green status must not be interpreted as satisfying those pending
 items.
 

@@ -3,7 +3,14 @@ local native = {}
 
 local function callable(value)
   local value_type = type(value)
-  return value_type == "function" or value_type == "userdata"
+  if value_type == "function" or value_type == "userdata" then
+    return true
+  end
+  if value_type == "table" then
+    local ok, metatable = pcall(getmetatable, value)
+    return ok and metatable ~= nil and metatable.__call ~= nil
+  end
+  return false
 end
 
 local function ui_api()
@@ -30,18 +37,18 @@ end
 
 local function point(x, y)
   local constructor = rawget(_G, "vec2")
-  if type(constructor) == "function" then
+  if callable(constructor) then
     local ok, result = pcall(constructor, x, y)
     if ok and result ~= nil then
       return result
     end
   end
-  return { x = x, y = y }
+  return nil
 end
 
 local function color(red, green, blue, alpha)
   local constructor = rawget(_G, "rgbm")
-  if type(constructor) == "function" then
+  if callable(constructor) then
     local ok, result = pcall(constructor, red, green, blue, alpha or 1)
     if ok and result ~= nil then
       return result
@@ -53,7 +60,7 @@ end
 local function invoke(name, ...)
   local api = ui_api()
   local callback = member(api, name)
-  if callback == nil then
+  if callback == nil or not callable(callback) then
     return false
   end
   local ok = pcall(callback, ...)
@@ -71,7 +78,7 @@ end
 
 function native.window_size()
   local api = ui_api()
-  local callback = member(api, "windowSize")
+  local callback = member(api, "availableSpace") or member(api, "windowSize")
   if callback ~= nil then
     local ok, result = pcall(callback)
     if ok and result ~= nil and type(result.x) == "number" and type(result.y) == "number" and result.x > 0 and result.y > 0 then
@@ -82,22 +89,37 @@ function native.window_size()
 end
 
 function native.fill(x, y, width, height, fill_color, rounding)
-  return invoke("drawRectFilled", point(x, y), point(x + math.max(1, width), y + math.max(1, height)), fill_color, rounding or 0)
+  local first = point(x, y)
+  local second = point(x + math.max(1, width), y + math.max(1, height))
+  if first == nil or second == nil then
+    return false
+  end
+  return invoke("drawRectFilled", first, second, fill_color, rounding or 0)
 end
 
 function native.outline(x, y, width, height, line_color, rounding, thickness)
-  return invoke("drawRect", point(x, y), point(x + math.max(1, width), y + math.max(1, height)), line_color, rounding or 0, nil, thickness or 1)
+  local first = point(x, y)
+  local second = point(x + math.max(1, width), y + math.max(1, height))
+  if first == nil or second == nil then
+    return false
+  end
+  return invoke("drawRect", first, second, line_color, rounding or 0, nil, thickness or 1)
 end
 
 function native.text_at(value, x, y, text_color)
   local text = safe_text(value)
-  if invoke("drawText", text, point(x, y), text_color) then
+  local position = point(x, y)
+  if position ~= nil and invoke("drawText", text, position, text_color) then
     return true
   end
   if invoke("textColored", text, text_color) then
     return true
   end
-  return invoke("text", text)
+  local drew = invoke("text", text)
+  if drew then
+    return true
+  end
+  return native.emergency(text)
 end
 
 function native.log(message)
@@ -110,8 +132,7 @@ function native.draw_canary()
   local drew_header = native.fill(12, 12, math.max(180, width - 24), 92, color(0.10, 0.13, 0.18, 1), 6)
   local drew_title = native.text_at("AVM PitWall", 28, 28, color(0.95, 0.98, 1, 1))
   local drew_status = native.text_at("F1 runtime active", 28, 56, color(0.25, 0.85, 1, 1))
-  local drew_detail = native.text_at("Initialising driver display...", 28, 80, color(0.72, 0.78, 0.86, 1))
-  return drew_background or drew_header or drew_title or drew_status or drew_detail
+  return drew_background or drew_header or drew_title or drew_status
 end
 
 function native.draw_recovery(stage, detail)

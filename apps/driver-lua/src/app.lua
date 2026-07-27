@@ -5,7 +5,6 @@ local compact = namespace.ui.compact
 local expanded = namespace.ui.expanded
 local garage = namespace.ui.garage
 local fallback = namespace.ui.fallback
-local theme = namespace.ui.theme
 local app = {}
 local runtime = namespace.runtime
 local lifecycle = runtime.lifecycle or {}
@@ -42,18 +41,90 @@ end
 local function log_capabilities(capabilities)
   log_once("capabilities_logged", "AVM F1 capabilities: level=" .. tostring(capabilities.level)
     .. " enhanced=" .. tostring(capabilities.enhanced)
+    .. " candidate=" .. tostring(capabilities.enhanced_candidate)
     .. " simplified=" .. tostring(not capabilities.enhanced)
     .. " missing_mandatory=" .. join_names(capabilities.missing_mandatory)
-    .. " missing_optional=" .. join_names(capabilities.missing_optional))
+    .. " missing_optional=" .. join_names(capabilities.missing_optional)
+    .. " incompatible_optional=" .. join_names(capabilities.incompatible_optional))
 end
 
 local function recover(stage, detail)
+  lifecycle.initialization_attempted = true
   lifecycle.recovery_stage = stage
   lifecycle.recovery_detail = bounded(detail)
   local ok = pcall(runtime.draw_recovery, stage, lifecycle.recovery_detail)
   if not ok then
     pcall(fallback.render, stage, lifecycle.recovery_detail)
   end
+end
+
+local function box_summary(box)
+  if type(box) ~= "table" then
+    return "invalid"
+  end
+  return string.format("%.0f,%.0f %.0fx%.0f", box.x or 0, box.y or 0, box.width or 0, box.height or 0)
+end
+
+local function log_layout(width, height, scale, boxes, source, strategy)
+  local first_card = boxes.cards.fuel or boxes.cards.timing or boxes.cards.overview
+  local weather = boxes.cards.weather or boxes.cards.diagnostics
+  local message = boxes.cards.message or boxes.banner
+  log_once("layout_geometry_logged", "AVM F1 layout: content_width=" .. tostring(width)
+    .. " content_height=" .. tostring(height)
+    .. " ui_scale=" .. tostring(scale)
+    .. " source=" .. tostring(source)
+    .. " strategy=" .. tostring(strategy)
+    .. " header=" .. box_summary(boxes.header)
+    .. " first_card=" .. box_summary(first_card)
+    .. " weather=" .. box_summary(weather)
+    .. " message=" .. box_summary(message))
+end
+
+local function render_enhanced_mode(vm, boxes, state)
+  if runtime.layout_strategy == "flow" then
+    runtime.record_skip("enhanced renderer: flow layout selected")
+    return false, "flow layout selected"
+  end
+  if runtime.capabilities == nil or not runtime.capabilities.enhanced_candidate then
+    runtime.record_skip("enhanced renderer: no callable enhanced API")
+    return false, "no callable enhanced API"
+  end
+  local before = runtime.render_evidence and runtime.render_evidence.enhanced or 0
+  runtime.set_render_phase("enhanced")
+  local ok, error_value = pcall(function()
+    if state.mode == "expanded" then
+      expanded.render(vm, boxes)
+    elseif state.mode == "garage" then
+      garage.render(vm, boxes, state)
+    else
+      compact.render(vm, boxes)
+    end
+  end)
+  local after = runtime.render_evidence and runtime.render_evidence.enhanced or 0
+  if not ok then
+    runtime.record_skip("enhanced renderer failed: " .. bounded(error_value))
+    return false, bounded(error_value)
+  end
+  if after <= before then
+    runtime.record_skip("enhanced renderer emitted zero operations")
+    return false, "zero enhanced operations"
+  end
+  runtime.capabilities.enhanced = true
+  return true, nil
+end
+
+local function render_text_first(vm, state)
+  runtime.set_render_phase("mode_text")
+  if state.mode == "expanded" then
+    expanded.render_text_first(vm)
+  elseif state.mode == "garage" then
+    garage.render_text_first(vm, state)
+  elseif not runtime.capabilities.enhanced then
+    compact.render_simplified(vm, state.mode)
+  else
+    compact.render_text_first(vm, state.mode, false)
+  end
+  runtime.set_render_phase("none")
 end
 
 local function run_stage(name, callback)
@@ -70,49 +141,6 @@ local function run_stage(name, callback)
     return false, detail
   end
   return true, result
-end
-
-local function draw_header(vm, boxes)
-  local header = boxes.header
-  csp.rect(header.x, header.y, header.width, header.height, theme.color("surface"), 7)
-  csp.outline(header.x, header.y, header.width, header.height, theme.color("border"), 7, 1)
-  csp.text_at("AVM", header.x + 12, header.y + 7, theme.color("text"))
-  csp.text_at("PitWall", header.x + 50, header.y + 7, theme.color("cyan"))
-  csp.text_at(vm.session_name, header.x + 126, header.y + 9, theme.color("text"))
-  csp.text_at("STINT  " .. vm.stint .. " / " .. vm.total_stints, header.x + header.width * 0.58, header.y + 9, theme.color("green"))
-  csp.text_at("LAP  " .. vm.lap .. " / " .. vm.planned_lap, header.x + header.width * 0.76, header.y + 9, theme.color("text"))
-  namespace.ui.components.progress(header.x + 12, header.y + header.height - 10, header.width - 24, vm.progress, "green")
-end
-
-local function draw_banner(vm, boxes, state)
-  local banner = boxes.banner
-  local critical = vm.alert.priority == "critical"
-  local tone = critical and "critical" or vm.alert.priority == "high" and "warning" or "info"
-  csp.rect(banner.x, banner.y, banner.width, banner.height, theme.color(critical and "red" or "surface_alt", critical and 0.16 or 1), 7)
-  csp.outline(banner.x, banner.y, banner.width, banner.height, theme.tone(tone), critical and 2 or 1, 1)
-  namespace.ui.icons.draw(critical and "critical" or "flag", banner.x + 10, banner.y + 10, 24, theme.tone(tone))
-  csp.text_at(vm.alert.text, banner.x + 44, banner.y + 8, theme.tone(tone))
-  csp.text_aligned(vm.alert.detail, banner.x + 44, banner.y + 29, banner.width - 150, theme.color("text"))
-  if vm.alert.requires_acknowledgement or vm.alert.status == "ACKNOWLEDGED" then
-    local ack_label = vm.alert.status == "ACKNOWLEDGED" and "ACKED" or "ACK"
-    if namespace.ui.components.button(ack_label, banner.x + banner.width - 92, banner.y + 12, 78, vm.alert.status == "ACKNOWLEDGED" and "good" or "critical") and vm.alert.status ~= "ACKNOWLEDGED" then
-      namespace.app_state.acknowledge()
-    end
-  elseif banner.height >= 46 then
-    if namespace.ui.components.button("REPEAT", banner.x + banner.width - 92, banner.y + 12, 78, "info") then
-      namespace.app_state.repeat_latest()
-    end
-  end
-end
-
-local function draw_footer(vm, boxes)
-  local footer = boxes.footer
-  csp.rect(footer.x, footer.y, footer.width, footer.height, theme.color("black"), 5)
-  namespace.ui.icons.draw(vm.connection_tone == "live" and "engineer" or "offline", footer.x + 8, footer.y + 5, 14, theme.tone(vm.connection_tone))
-  csp.text_at("Engineer: " .. vm.connections.engineer, footer.x + 28, footer.y + 7, theme.color("muted"))
-  namespace.ui.icons.draw(vm.connection_tone == "live" and "bridge" or "stale", footer.x + footer.width * 0.37, footer.y + 5, 14, theme.tone(vm.connection_tone))
-  csp.text_at("Bridge: " .. vm.connections.bridge, footer.x + footer.width * 0.37 + 20, footer.y + 7, theme.color("muted"))
-  csp.text_at("Telemetry: " .. vm.connections.telemetry, footer.x + footer.width * 0.70, footer.y + 7, theme.tone(vm.connection_tone))
 end
 
 function app.windowMain(dt)
@@ -134,7 +162,6 @@ function app.windowMain(dt)
   local capability_ok, capability_error = run_stage("capabilities", function()
     local capabilities = csp.capabilities()
     runtime.capabilities = capabilities
-    log_capabilities(capabilities)
     if not capabilities.required then
       error("Missing mandatory API: " .. join_names(capabilities.missing_mandatory))
     end
@@ -193,14 +220,16 @@ function app.windowMain(dt)
 
   local width, height, boxes
   local layout_ok, layout_error = run_stage("layout", function()
-    width, height = csp.window_size()
-    local render_mode = runtime.capabilities.enhanced and state.mode or "compact"
-    boxes = layout.for_mode(width, height, render_mode, vm.alert.priority == "critical")
-    assert(layout.intersects(boxes.header, width, height), "header layout is not visible")
-    assert(layout.intersects(boxes.footer, width, height), "footer layout is not visible")
-    for name, required_box in pairs(layout.required_boxes(width, height, state.mode, vm.alert.priority == "critical")) do
-      assert(layout.intersects(required_box, width, height), name .. " layout is not visible")
+    local source
+    width, height, source = csp.window_size()
+    local scale = csp.ui_scale()
+    boxes = layout.for_mode(width, height, state.mode, vm.alert.priority == "critical")
+    local valid = layout.valid(boxes, width, height, state.mode, vm.alert.priority == "critical")
+    runtime.layout_strategy = source == "fallback" or not valid and "flow" or "cards"
+    if not valid then
+      runtime.record_skip("layout: invalid or off-screen bounds")
     end
+    log_layout(width, height, scale, boxes, source, runtime.layout_strategy)
   end)
   if not layout_ok then
     recover("layout", layout_error)
@@ -209,19 +238,20 @@ function app.windowMain(dt)
   log_once("layout_ready_logged", "layout ready")
 
   local selected_mode_ok, selected_mode_error = run_stage("selected-mode", function()
-    if not runtime.capabilities.enhanced then
-      compact.render_simplified(vm, state.mode)
-    else
-      csp.rect(0, 0, width, height, theme.color("background"), 0)
-      draw_header(vm, boxes)
-      if state.mode == "expanded" then
-        expanded.render(vm, boxes)
-      elseif state.mode == "garage" then
-        garage.render(vm, boxes, state)
-      else
-        compact.render(vm, boxes)
-      end
+    runtime.set_render_mode(state.mode)
+    local enhanced_ok, enhanced_error = render_enhanced_mode(vm, boxes, state)
+    runtime.set_render_phase("mode_text")
+    render_text_first(vm, state)
+    if not enhanced_ok then
+      runtime.log_once("enhanced_fallback_logged", "enhanced renderer unavailable: " .. tostring(enhanced_error or "unknown reason") .. "; text-first mode retained")
     end
+    runtime.capabilities.enhanced = enhanced_ok
+    log_capabilities(runtime.capabilities)
+    if runtime.mode_draw_count() <= 0 then
+      error("mode renderer emitted no visible operations")
+    end
+    lifecycle.mode_content_ready = true
+    runtime.log_render_evidence_once()
   end)
   if not selected_mode_ok then
     recover("selected-mode", selected_mode_error)
@@ -230,7 +260,10 @@ function app.windowMain(dt)
   log_once("selected_mode_logged", "selected mode rendered")
 
   local alert_ok, alert_error = run_stage("alerts", function()
-    draw_banner(vm, boxes, state)
+    -- Text-first mode owns the visible engineer message.
+    if not lifecycle.mode_content_ready then
+      runtime.record_skip("alerts: mode text not ready")
+    end
   end)
   if not alert_ok then
     recover("alerts", alert_error)
@@ -238,7 +271,10 @@ function app.windowMain(dt)
   end
 
   local footer_ok, footer_error = run_stage("footer", function()
-    draw_footer(vm, boxes)
+    -- Text-first mode owns the visible connection state as well.
+    if not lifecycle.mode_content_ready then
+      runtime.record_skip("footer: mode text not ready")
+    end
   end)
   if not footer_ok then
     recover("footer", footer_error)
@@ -251,7 +287,11 @@ function app.windowMain(dt)
   if not audio_ok then
     runtime.log_once("audio_degraded_logged", "audio degraded detail=" .. bounded(audio_error))
   end
-  log_once("full_mode_logged", "full mode rendered")
+  if runtime.mode_draw_count() > 0 then
+    log_once("full_mode_logged", "full mode rendered")
+  else
+    recover("selected-mode", "no visible mode-specific draw operation")
+  end
 end
 
 function app.reset_for_test()

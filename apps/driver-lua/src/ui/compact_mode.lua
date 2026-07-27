@@ -47,21 +47,38 @@ function compact.render(vm, boxes)
   components.label(vm.weather.source .. "  |  " .. vm.weather.confidence, weather.x + weather.width - 190, weather.y + 49, theme.color("muted"))
 end
 
+local function value(value, fallback)
+  local text = tostring(value or "")
+  return text == "" and (fallback or "UNAVAILABLE") or text
+end
+
+function compact.render_text_first(vm, requested_mode, simplified)
+  local mode_label = requested_mode == "compact" and "Compact" or "Compact (requested " .. value(requested_mode, "unknown") .. ")"
+  local message = value(vm.alert.text, "NO ACTIVE INSTRUCTION")
+  csp.text(simplified and "Simplified rendering mode" or "AVM PitWall")
+  if requested_mode == "compact" then
+    csp.text("MODE: COMPACT")
+  else
+    csp.text("MODE: " .. string.upper(mode_label))
+  end
+  csp.text("STINT: " .. value(vm.stint) .. " / " .. value(vm.total_stints) .. "    LAP: " .. value(vm.lap) .. " / " .. value(vm.planned_lap))
+  csp.text("TIME: ELAPSED: " .. value(vm.timing.elapsed) .. "    REMAINING: " .. value(vm.timing.remaining))
+  csp.text("TARGET STINT: " .. value(vm.timing.target))
+  csp.text("FUEL: STATUS: " .. value(vm.fuel.current) .. "    RANGE: " .. value(vm.fuel.range))
+  csp.text("FUEL: DISTANCE TO PIT ENTRY: " .. value(vm.fuel.distance_to_pit) .. "    PIT ROUTE: " .. value(vm.fuel.pit_route))
+  csp.text("FUEL: EXPECTED AT PIT ENTRY: " .. value(vm.fuel.expected_at_pit))
+  csp.text("PACE: STATUS: " .. value(vm.pace.status) .. "    DELTA: " .. value(vm.pace.delta))
+  csp.text("TYRES: COMPOUND: " .. value(vm.tyres.compound) .. "    CONDITION: " .. value(vm.tyres.condition))
+  csp.text("WEATHER: CURRENT: " .. value(vm.weather.current) .. " / " .. value(vm.weather.condition))
+  csp.text("NEXT WEATHER: " .. value(vm.weather.next_change) .. "    ETA: " .. value(vm.weather.eta))
+  csp.text("WEATHER: SOURCE: " .. value(vm.weather.source) .. "    CONFIDENCE: " .. value(vm.weather.confidence))
+  csp.text("ENGINEER: " .. message)
+  csp.text("CONNECTION: BRIDGE: " .. value(vm.connections.bridge) .. "    ENGINEER: " .. value(vm.connections.engineer))
+  csp.text("CONNECTION: TELEMETRY AGE: " .. value(vm.connections.telemetry))
+end
+
 function compact.render_simplified(vm, requested_mode)
-  csp.text("Simplified rendering mode")
-  csp.separator()
-  csp.text("AVM PitWall | Compact Mode")
-  csp.text("MODE: COMPACT" .. (requested_mode ~= "compact" and " (requested " .. tostring(requested_mode or "unknown") .. ")" or ""))
-  csp.text("STINT: " .. vm.stint .. " / " .. vm.total_stints .. "    LAP: " .. vm.lap .. " / " .. vm.planned_lap)
-  csp.text("ELAPSED: " .. vm.timing.elapsed .. "    REMAINING: " .. vm.timing.remaining .. (vm.timing.remaining_is_estimated and " (estimated)" or ""))
-  csp.text("TARGET STINT: " .. vm.timing.target)
-  csp.text("FUEL: " .. vm.fuel.current .. "    RANGE: " .. vm.fuel.range)
-  csp.text("DISTANCE TO PIT ENTRY: " .. vm.fuel.distance_to_pit)
-  csp.text("WEATHER: " .. vm.weather.current .. " / " .. vm.weather.condition)
-  csp.text("NEXT WEATHER: " .. vm.weather.next_change .. "    ETA: " .. vm.weather.eta)
-  csp.text("ENGINEER: " .. vm.alert.text .. " - " .. vm.alert.detail)
-  csp.text("BRIDGE: " .. vm.connections.bridge .. "    ENGINEER: " .. vm.connections.engineer)
-  csp.text("TELEMETRY: " .. vm.connections.telemetry)
+  compact.render_text_first(vm, requested_mode, true)
 end
 
 namespace.ui.compact = compact

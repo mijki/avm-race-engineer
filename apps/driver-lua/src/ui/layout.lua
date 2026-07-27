@@ -75,12 +75,53 @@ end
 
 function layout.intersects(box, width, height)
   return type(box) == "table"
+    and type(width) == "number"
+    and type(height) == "number"
+    and type(box.x) == "number"
+    and type(box.y) == "number"
+    and type(box.width) == "number"
+    and type(box.height) == "number"
+    and box.x == box.x
+    and box.y == box.y
+    and box.width == box.width
+    and box.height == box.height
     and box.width > 0
     and box.height > 0
     and box.x < width
     and box.y < height
     and box.x + box.width > 0
     and box.y + box.height > 0
+end
+
+function layout.valid(boxes, width, height, mode, critical)
+  if type(boxes) ~= "table" or type(width) ~= "number" or type(height) ~= "number" or width <= 0 or height <= 0 then
+    return false
+  end
+  local function contained(box)
+    return layout.intersects(box, width, height)
+      and box.x >= 0
+      and box.y >= 0
+      and box.x + box.width <= width
+      and box.y + box.height <= height
+  end
+  for _, box in pairs(boxes) do
+    if type(box) == "table" and box.x ~= nil and not contained(box) then
+      return false
+    end
+  end
+  if type(boxes.cards) == "table" then
+    for _, box in pairs(boxes.cards) do
+      if not contained(box) then
+        return false
+      end
+    end
+  end
+  for _, box in pairs(layout.required_boxes(width, height, mode, critical)) do
+    if not contained(box) then
+      return false
+    end
+  end
+  return true
 end
 
 function layout.required_boxes(width, height, mode, critical)

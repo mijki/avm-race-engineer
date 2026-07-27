@@ -134,6 +134,43 @@ callback. Bootstrap now owns the shell, both callback aliases share one
 guarded entrypoint, and one per-frame guard prevents a recovery path from
 re-emitting it.
 
+### Renderer visibility correction
+
+The pre-correction follow-up real-CSP retest reached namespace, capability, state, fixture,
+view-model, layout, selected-mode, alert, footer, and audio stages. The
+visible result was still only the direct native shell, despite a
+`full mode rendered` log. The exact defect was silent success in the enhanced
+path: a protected call returning without a Lua exception was treated as
+visible output, while positioned drawing depended on CSP callable members and
+constructed `vec2`/`rgbm` values that had not been validated. Absolute layout
+draws could therefore return successfully without proving an on-window draw.
+
+The adapter correction uses callable-member detection for functions,
+userdata, and callable tables; validates vectors, positive bounds, finite
+coordinates, colors, and alpha; and returns explicit `drawn`, `degraded`,
+`unavailable`, or `failed` statuses. It records skipped operations and the
+first reason rather than silently claiming success. The real SDK's
+`ui.availableSpace()` is now the preferred content-size source, with axis,
+window-size, and conservative fallback paths. Invalid or off-screen layout
+selects flow rendering.
+
+The guaranteed base renderer is direct `ui.text()` flow output. Compact shows
+mode, stint/lap, time, fuel, pace, tyres, weather, engineer, and connection
+fixture values; Expanded and Garage/Diagnostics emit mode-specific text before
+any optional decoration. Frame-local evidence tracks native, mode-text,
+enhanced, degraded, skipped, and first-skip counts. `full mode rendered` now
+requires non-zero mode evidence, and enhanced zero-operation attempts retain
+the visible text-first body. The initialization line is suppressed after a
+successful mode body, so it cannot remain as a stale final state.
+
+Host tests cover the accounting contract, no-op adapter behavior, callable
+member handling, text-only values, size/layout fallback, zero-operation
+enhanced fallback, initialization lifecycle, all three mode renderers,
+deterministic bundling, and F1 scope scans. The supplied real-CSP result is
+recorded as the pre-correction baseline; post-correction Compact, Expanded,
+and Garage screenshot validation remains pending and is required before this
+phase can be marked CSP-validated.
+
 This follow-up has host-side static and deterministic coverage for capability
 levels, exact diagnostics, text-only rendering labels, independent optional
 degradation, callback alias delegation, and single-shell ownership. The real

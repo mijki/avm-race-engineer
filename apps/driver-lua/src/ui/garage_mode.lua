@@ -57,4 +57,22 @@ function garage.render(vm, boxes, state)
   components.label("No networking, live telemetry, strategy calculation, weather calculation, or setup application is present in F1.", diagnostics.x + 10, diagnostics.y + 58, theme.color("muted"))
 end
 
+local function value(value, fallback)
+  local text = tostring(value or "")
+  return text == "" and (fallback or "UNAVAILABLE") or text
+end
+
+function garage.render_text_first(vm, state)
+  csp.text("AVM PitWall")
+  csp.text("MODE: Garage / Diagnostics")
+  csp.text("SCENARIO: " .. value(state.scenario_id, "UNKNOWN") .. "    SESSION: " .. value(vm.session_name, "UNKNOWN SESSION"))
+  csp.text("SNAPSHOT: " .. (vm.available and "VALID" or "MALFORMED") .. "    CONFIDENCE: " .. value(vm.confidence))
+  csp.text("WEATHER: " .. value(vm.weather.label) .. "    Source: " .. value(vm.weather.source) .. "    Confidence: " .. value(vm.weather.confidence))
+  csp.text("AUDIO: " .. value(namespace.adapters.audio.status(), "UNAVAILABLE"))
+  csp.text("SOURCE: " .. value(vm.connections.source, "MOCK FIXTURE"))
+  csp.text("ENGINEER: " .. value(vm.connections.engineer) .. "    BRIDGE: " .. value(vm.connections.bridge))
+  csp.text("TELEMETRY AGE: " .. value(vm.connections.telemetry))
+  csp.text("F1 diagnostics only: no networking, strategy, forecast, or setup application.")
+end
+
 namespace.ui.garage = garage

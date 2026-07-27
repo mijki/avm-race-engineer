@@ -15,6 +15,18 @@ local runtime = namespace.runtime
 local lifecycle = runtime.lifecycle or {}
 runtime.lifecycle = lifecycle
 
+local function callable(value)
+  local value_type = type(value)
+  if value_type == "function" or value_type == "userdata" then
+    return true
+  end
+  if value_type == "table" then
+    local ok, metatable = pcall(getmetatable, value)
+    return ok and metatable ~= nil and metatable.__call ~= nil
+  end
+  return false
+end
+
 local function bounded(value)
   local text = tostring(value or "unknown")
   text = string.gsub(text, "[%c]", " ")
@@ -42,6 +54,73 @@ function runtime.log_once(key, message)
   runtime.log(message)
 end
 
+local function new_render_evidence()
+  return {
+    mode = "unknown",
+    native = 0,
+    mode_text = 0,
+    enhanced = 0,
+    degraded = 0,
+    skipped = 0,
+    first_skip = nil,
+    phase = "native",
+  }
+end
+
+function runtime.record_draw(kind)
+  local evidence = runtime.render_evidence or new_render_evidence()
+  runtime.render_evidence = evidence
+  if kind == "native" then
+    evidence.native = evidence.native + 1
+  elseif kind == "mode_text" then
+    evidence.mode_text = evidence.mode_text + 1
+  elseif kind == "enhanced" then
+    evidence.enhanced = evidence.enhanced + 1
+  elseif kind == "degraded" then
+    evidence.degraded = evidence.degraded + 1
+  end
+end
+
+function runtime.record_skip(reason)
+  local evidence = runtime.render_evidence or new_render_evidence()
+  runtime.render_evidence = evidence
+  evidence.skipped = evidence.skipped + 1
+  if evidence.first_skip == nil then
+    local detail = tostring(reason or "unspecified")
+    detail = string.gsub(detail, "[%c]", " ")
+    evidence.first_skip = #detail > 96 and string.sub(detail, 1, 93) .. "..." or detail
+  end
+end
+
+function runtime.set_render_phase(phase)
+  local evidence = runtime.render_evidence or new_render_evidence()
+  runtime.render_evidence = evidence
+  evidence.phase = phase or "none"
+end
+
+function runtime.set_render_mode(mode)
+  local evidence = runtime.render_evidence or new_render_evidence()
+  runtime.render_evidence = evidence
+  evidence.mode = tostring(mode or "unknown")
+end
+
+function runtime.mode_draw_count()
+  local evidence = runtime.render_evidence or new_render_evidence()
+  return evidence.mode_text + evidence.enhanced + evidence.degraded
+end
+
+function runtime.log_render_evidence_once()
+  local evidence = runtime.render_evidence or new_render_evidence()
+  local first_skip = evidence.first_skip or "none"
+  runtime.log_once("render_evidence_logged", "AVM F1 render evidence: mode=" .. tostring(evidence.mode)
+    .. " native=" .. tostring(evidence.native)
+    .. " mode_text=" .. tostring(evidence.mode_text)
+    .. " enhanced=" .. tostring(evidence.enhanced)
+    .. " degraded=" .. tostring(evidence.degraded)
+    .. " skipped=" .. tostring(evidence.skipped)
+    .. " first_skip=" .. first_skip)
+end
+
 local function direct_text(value)
   local api = rawget(_G, "ui")
   local api_type = type(api)
@@ -51,10 +130,13 @@ local function direct_text(value)
   local ok, callback = pcall(function()
     return api.text
   end)
-  if not ok or (type(callback) ~= "function" and type(callback) ~= "userdata") then
+  if not ok or not callable(callback) then
     return false
   end
   ok = pcall(callback, bounded(value))
+  if ok then
+    runtime.record_draw("native")
+  end
   return ok
 end
 
@@ -65,8 +147,14 @@ local function direct_separator()
     local ok, callback = pcall(function()
       return api.separator
     end)
-    if ok and (type(callback) == "function" or type(callback) == "userdata") then
-      pcall(callback)
+    if ok and callable(callback) then
+      local separator_ok = pcall(callback)
+      if separator_ok then
+        runtime.record_draw("native")
+      else
+        runtime.record_skip("ui.separator: protected call failed")
+        direct_text("--------------------")
+      end
     else
       direct_text("--------------------")
     end
@@ -78,6 +166,8 @@ end
 function runtime.begin_frame()
   lifecycle.entry_shell_drawn = false
   lifecycle.recovery_drawn = false
+  runtime.render_evidence = new_render_evidence()
+  runtime.set_render_phase("native")
 end
 
 function runtime.draw_entry_shell()
@@ -86,9 +176,13 @@ function runtime.draw_entry_shell()
   end
   lifecycle.entry_shell_drawn = true
   local drew_title = direct_text("AVM PitWall")
-  direct_separator()
-  local drew_status = direct_text("F1 runtime active")
-  local drew_detail = direct_text("Initialising driver display...")
+  local drew_status = false
+  local drew_detail = false
+  if not lifecycle.mode_content_ready and not lifecycle.initialization_attempted then
+    direct_separator()
+    drew_status = direct_text("F1 runtime active")
+    drew_detail = direct_text("Initialising driver display...")
+  end
   return drew_title or drew_status or drew_detail
 end
 

@@ -86,4 +86,23 @@ function expanded.render(vm, boxes)
   components.status_line("TELEMETRY", vm.connections.telemetry, connections.x + 10, connections.y + 80, connections.width - 20, vm.connection_tone, "telemetry")
 end
 
+local function value(value, fallback)
+  local text = tostring(value or "")
+  return text == "" and (fallback or "UNAVAILABLE") or text
+end
+
+function expanded.render_text_first(vm)
+  csp.text("AVM PitWall")
+  csp.text("MODE: Expanded")
+  csp.text("STINT: " .. value(vm.stint) .. " / " .. value(vm.total_stints) .. "    LAP: " .. value(vm.lap) .. " / " .. value(vm.planned_lap))
+  csp.text("TIME: Elapsed: " .. value(vm.timing.elapsed) .. "    Remaining: " .. value(vm.timing.remaining) .. "    Target: " .. value(vm.timing.target))
+  csp.text("FUEL: Range: " .. value(vm.fuel.range) .. "    Current: " .. value(vm.fuel.current) .. "    Pit entry: " .. value(vm.fuel.expected_at_pit))
+  csp.text("PACE: Status: " .. value(vm.pace.status) .. "    Delta: " .. value(vm.pace.delta) .. "    Last lap: " .. value(vm.pace.last_lap))
+  csp.text("TYRES: Compound: " .. value(vm.tyres.compound) .. "    Condition: " .. value(vm.tyres.condition) .. "    Wear: " .. value(vm.tyres.wear))
+  csp.text("PIT: Window: " .. value(vm.pit.window) .. "    Call: " .. value(vm.pit.recommendation))
+  csp.text("WEATHER: Current: " .. value(vm.weather.current) .. "    Next change: " .. value(vm.weather.next_change))
+  csp.text("ENGINEER: " .. value(vm.alert.text, "NO ACTIVE INSTRUCTION"))
+  csp.text("CONNECTION: Bridge: " .. value(vm.connections.bridge) .. "    Engineer: " .. value(vm.connections.engineer) .. "    Telemetry age: " .. value(vm.connections.telemetry))
+end
+
 namespace.ui.expanded = expanded
