@@ -20,12 +20,14 @@ surface and therefore carries the strictest safety constraints.
 
 - CSP Lua app is maintained as small source modules under `src/` and bundled in
   an explicit dependency order from `build/module-manifest.json`.
-- The generated package contains one runtime bundle, no runtime `require` or
+- The generated package contains one canonical runtime bundle,
+  `AVM_PitWall_F1.lua`, no runtime `require` or
   `dofile`, four deterministic WAV tones, an asset manifest, and a build hash
   manifest. Generated files are ignored and recreated by the build.
 - CSP calls, audio, and presentation storage are isolated behind
-  `src/adapters/`; contracts, formatting, view-model reduction, alert state,
-  and layout selection remain host-testable.
+  `src/adapters/`; the first-frame native canary and recovery renderer use only
+  documented direct CSP UI calls. Contracts, formatting, view-model reduction,
+  alert state, and layout selection remain host-testable.
 - The shell has exactly three modes: Compact Race, Expanded Race, and
   Garage/Diagnostics. Race modes are fixed single-screen compositions with no
   scrolling child UI.
@@ -47,8 +49,10 @@ python -m unittest discover -s tests -p "test_f1_*.py" -q
 
 The generated development package is written to
 `apps/driver-lua/dist/AVM_PitWall_F1/` and is not hand-edited. The package
-contains `manifest.ini`, `AVM_PitWall.lua`, `script.lua`, `README.md`,
+contains `manifest.ini`, `AVM_PitWall_F1.lua`, `README.md`,
 `asset-manifest.json`, `build-manifest.json`, and `assets/sounds/`.
+`AVM_PitWall_F1.lua` is the folder-matching CSP entry and exports
+`script.windowMain(dt)` for `FUNCTION_MAIN = windowMain`.
 
 ## Fixture scenarios
 

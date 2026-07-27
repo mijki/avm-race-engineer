@@ -48,7 +48,7 @@ checks.
 
 The F1 implementation now provides:
 
-- `apps/driver-lua/src/` source modules with an explicit 20-module dependency
+- `apps/driver-lua/src/` source modules with an explicit 21-module dependency
   graph and one generated runtime bundle;
 - deterministic contract fixtures under `apps/driver-lua/fixtures/contracts/`
   plus the required 18-scenario catalog;
@@ -85,6 +85,14 @@ asset, installer, and deterministic-build checks. The local environment does
 not provide a Lua parser, Lupa, or an interactive Assetto Corsa/CSP session, so
 callback execution, visible in-game render smoke, and mode/audio interaction
 remain pending. This is deliberately not counted as CSP validation passed.
+
+The F1 CSP correction uses the unique `AVM PitWall F1 Dev` registration with
+`[WINDOW_...]`, the folder-matching `AVM_PitWall_F1.lua` entry, and the
+canonical `script.windowMain(dt)` callback. The callback draws a direct native
+canary first and retains it with bounded direct-native recovery panels when a
+later stage fails. The original manual manifest test proved app discovery and
+window creation, but its blank client region means the real runtime gate still
+requires an interactive retest.
 
 ## Security
 

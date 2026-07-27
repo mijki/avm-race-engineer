@@ -27,17 +27,20 @@ Related documents: [System Context](system-context.md),
 ## F1 implementation notes
 
 The implementation lives in `apps/driver-lua/`. The explicit graph in
-`build/module-manifest.json` orders 20 modules from `bootstrap` through `app`;
+`build/module-manifest.json` orders 21 modules from `bootstrap` through `app`;
 the bundler rejects duplicate IDs, missing dependencies, cycles, and missing
 source files. Each source module is wrapped in a deterministic lexical block,
-and `AVM_PitWall.lua` plus `script.lua` are generated outputs with source and
-package hashes recorded in `build-manifest.json`.
+and `AVM_PitWall_F1.lua` is the single generated CSP entry output with source
+and package hashes recorded in `build-manifest.json`.
 
-The runtime namespace is `_G.AVM_PITWALL_F1`; the only callback global is the
-required `windowMain` entry point. Direct `ui`, `rgbm`, `vec2`, `ac`, audio, and
-storage access is confined to the adapter modules. The view model, formatter,
-alert state machine, scenario catalog, and layout calculator accept bounded
-inputs and do not perform networking or production race/weather calculations.
+The runtime namespace is `_G.AVM_PITWALL_F1`; CSP resolves
+`FUNCTION_MAIN = windowMain` through `script.windowMain(dt)`. The callback
+starts with a direct native CSP canary before state, storage, fixture, audio, or
+view-model work, then advances through narrow render stages. Direct `ui`,
+`rgbm`, `vec2`, `ac`, audio, and storage access is confined to the runtime/native
+and adapter boundaries. The view model, formatter, alert state machine,
+scenario catalog, and layout calculator accept bounded inputs and do not
+perform networking or production race/weather calculations.
 
 The release package contains no source fixtures or development modules. The
 bundled asset manifest documents project ownership, licenses, dimensions,

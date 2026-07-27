@@ -1,16 +1,23 @@
 local namespace = _G.AVM_PITWALL_F1
 local csp = {}
 
+local function ui_api()
+  local candidate = rawget(_G, "ui")
+  return type(candidate) == "table" and candidate or nil
+end
+
 local function call_ui(name, ...)
-  if type(ui) ~= "table" or type(ui[name]) ~= "function" then
+  local api = ui_api()
+  if api == nil or type(api[name]) ~= "function" then
     return false, nil
   end
-  return pcall(ui[name], ...)
+  return pcall(api[name], ...)
 end
 
 local function point(x, y)
-  if type(vec2) == "function" then
-    local ok, result = pcall(vec2, x, y)
+  local constructor = rawget(_G, "vec2")
+  if type(constructor) == "function" then
+    local ok, result = pcall(constructor, x, y)
     if ok and result ~= nil then
       return result
     end
@@ -19,8 +26,9 @@ local function point(x, y)
 end
 
 function csp.color(red, green, blue, alpha)
-  if type(rgbm) == "function" then
-    local ok, result = pcall(rgbm, red, green, blue, alpha or 1)
+  local constructor = rawget(_G, "rgbm")
+  if type(constructor) == "function" then
+    local ok, result = pcall(constructor, red, green, blue, alpha or 1)
     if ok and result ~= nil then
       return result
     end
@@ -38,6 +46,20 @@ function csp.window_size()
     return result.x, result.y
   end
   return 780, 380
+end
+
+function csp.capabilities()
+  local api = ui_api()
+  local required = api ~= nil
+    and type(api.windowSize) == "function"
+    and type(api.drawRectFilled) == "function"
+    and type(api.drawText) == "function"
+  return {
+    backend = "csp-native",
+    required = required,
+    optional_draw_text_clipped = api ~= nil and type(api.drawTextClipped) == "function",
+    optional_buttons = api ~= nil and type(api.invisibleButton) == "function" and type(api.setCursorScreenPos) == "function",
+  }
 end
 
 function csp.text(value, color)
@@ -119,10 +141,12 @@ function csp.separator(color)
 end
 
 function csp.log(message)
-  if type(ac) == "table" and type(ac.console) == "function" then
-    pcall(ac.console, "AVM PitWall F1: " .. tostring(message), false)
+  local ac_api = rawget(_G, "ac")
+  if type(ac_api) == "table" and type(ac_api.console) == "function" then
+    pcall(ac_api.console, "AVM PitWall F1: " .. tostring(message), false)
   end
 end
 
 namespace.adapters = namespace.adapters or {}
+csp.backend = "csp-native"
 namespace.adapters.csp = csp

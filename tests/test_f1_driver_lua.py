@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+import configparser
 import tempfile
 import unittest
 from pathlib import Path
 
 from tools.build_f1 import build, load_modules, validate_asset_manifest, verify_deterministic
 from tools.f1_fixture_builder import SCENARIOS
-from tools.f1_host import callback_smoke, forbidden_patterns, local_count, parse_lua_files
+from tools.f1_host import box_intersects_window, callback_smoke, forbidden_patterns, local_count, parse_lua_files, required_layout_boxes, stage_failure_smoke
+from tools import f1_installer
 from tools.f1_installer import apply_install_plan, build_install_plan
 from tools.f1_validation import load_json, parse_all_json, validate_file
 
@@ -67,7 +69,7 @@ class F1DriverLuaTests(unittest.TestCase):
     def test_module_graph_is_ordered_and_complete(self) -> None:
         modules = load_modules()
         positions = {module.module_id: index for index, module in enumerate(modules)}
-        self.assertEqual(len(modules), 20)
+        self.assertEqual(len(modules), 21)
         for module in modules:
             for dependency in module.depends_on:
                 self.assertLess(positions[dependency], positions[module.module_id])
@@ -101,25 +103,28 @@ class F1DriverLuaTests(unittest.TestCase):
             first_files = {path.relative_to(first).as_posix(): path.read_bytes() for path in first.rglob("*") if path.is_file()}
             second_files = {path.relative_to(second).as_posix(): path.read_bytes() for path in second.rglob("*") if path.is_file()}
             self.assertEqual(first_files, second_files)
-            bundle = (first / "AVM_PitWall.lua").read_text(encoding="utf-8")
+            bundle = (first / "AVM_PitWall_F1.lua").read_text(encoding="utf-8")
             self.assertIn("GENERATED FILE - DO NOT EDIT", bundle)
             self.assertNotIn("require(", bundle)
             self.assertNotIn("dofile(", bundle)
+            self.assertNotIn("AVM_PitWall.lua", first_files)
+            self.assertNotIn("script.lua", first_files)
 
     def test_bundle_parser_and_safety_scan(self) -> None:
-        bundle = DIST / "AVM_PitWall.lua"
+        bundle = DIST / "AVM_PitWall_F1.lua"
         result = parse_lua_files([bundle])
         self.assertTrue(result.backend)
         text = bundle.read_text(encoding="utf-8")
         self.assertEqual(forbidden_patterns(text), [])
         self.assertLessEqual(local_count(text), 20)
-        self.assertIn("_G.windowMain", text)
+        self.assertIn("function script.windowMain(dt)", text)
+        self.assertNotIn("_G.windowMain", text)
 
     def test_race_modes_are_single_screen_and_render_critical_copy(self) -> None:
         source = "\n".join(path.read_text(encoding="utf-8") for path in (APP_ROOT / "src").rglob("*.lua"))
         self.assertNotIn("beginChild", source)
         self.assertNotIn("setNextWindowContentSize", source)
-        bundle = (DIST / "AVM_PitWall.lua").read_text(encoding="utf-8")
+        bundle = (DIST / "AVM_PitWall_F1.lua").read_text(encoding="utf-8")
         for label in ("ELAPSED", "REMAINING", "TARGET", "FUEL RANGE", "DISTANCE TO PIT ENTRY", "PIT ROUTE", "EXPECTED AT PIT ENTRY", "TARGET PACE", "WEATHER", "ACK", "BOX BOX - THIS LAP"):
             self.assertIn(label, bundle)
 
@@ -141,7 +146,77 @@ class F1DriverLuaTests(unittest.TestCase):
             apply_install_plan(plan, ac_root, root / "backup")
             self.assertEqual((v1 / "sentinel.txt").read_text(encoding="utf-8"), "V1 untouched\n")
             self.assertEqual((destination / "unrelated.ini").read_text(encoding="utf-8"), "preserve\n")
-            self.assertIn("AVM PitWall F1 deterministic runtime bundle", (destination / "AVM_PitWall.lua").read_text(encoding="utf-8"))
+            self.assertIn("AVM PitWall F1 deterministic runtime bundle", (destination / "AVM_PitWall_F1.lua").read_text(encoding="utf-8"))
+
+    def test_installer_rejects_v1_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            ac_root = root / "assetto"
+            package = root / "package"
+            build(package)
+            original_target = f1_installer.TARGET_RELATIVE
+            try:
+                f1_installer.TARGET_RELATIVE = Path("apps") / "lua" / f1_installer.V1_NAME
+                with self.assertRaises(f1_installer.InstallApplyError):
+                    f1_installer.build_install_plan(package, ac_root)
+            finally:
+                f1_installer.TARGET_RELATIVE = original_target
+
+    def test_manifest_registration_and_canonical_entry(self) -> None:
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read(APP_ROOT / "manifest" / "manifest.ini", encoding="utf-8")
+        self.assertEqual(parser["ABOUT"]["NAME"], "AVM PitWall F1 Dev")
+        self.assertNotEqual(parser["ABOUT"]["NAME"], "AVM PitWall")
+        self.assertEqual(parser["WINDOW_..."]["NAME"], "AVM PitWall F1 Dev")
+        self.assertEqual(parser["WINDOW_..."]["FUNCTION_MAIN"], "windowMain")
+        self.assertNotIn("WINDOW_MAIN", parser.sections())
+
+        generated = DIST / "manifest.ini"
+        self.assertEqual(generated.read_text(encoding="utf-8"), (APP_ROOT / "manifest" / "manifest.ini").read_text(encoding="utf-8"))
+        canonical = DIST / "AVM_PitWall_F1.lua"
+        self.assertTrue(canonical.is_file())
+        self.assertIn("function script.windowMain(dt)", canonical.read_text(encoding="utf-8"))
+        self.assertFalse((DIST / "AVM_PitWall.lua").exists())
+        self.assertFalse((DIST / "script.lua").exists())
+
+        build_manifest = load_json(DIST / "build-manifest.json")
+        allowlist = set(build_manifest["release_allowlist"])
+        actual = {path.relative_to(DIST).as_posix() for path in DIST.rglob("*") if path.is_file()}
+        self.assertEqual(actual, allowlist)
+        self.assertIn("AVM_PitWall_F1.lua", allowlist)
+        self.assertNotIn("AVM_PitWall.lua", allowlist)
+        self.assertNotIn("script.lua", allowlist)
+
+    def test_layout_visibility_matrix(self) -> None:
+        for width, height in ((540, 240), (780, 380), (900, 500), (1200, 720)):
+            for mode in ("compact", "expanded", "garage"):
+                boxes = required_layout_boxes(width, height, mode)
+                for name, box in boxes.items():
+                    self.assertTrue(box_intersects_window(box, width, height), f"{mode} {name} is outside {width}x{height}")
+
+    def test_runtime_staging_and_first_draw_contract(self) -> None:
+        source = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
+        self.assertLess(source.index("native.draw_canary()"), source.index("namespace.app_state.ensure"))
+        for stage in ("runtime-capability-check", "application-state", "mock-snapshot", "view-model", "selected-mode", "base-shell", "alert-overlay", "connection-footer", "audio-side-effects"):
+            self.assertIn(stage, source)
+        self.assertIn("test_fail_stage", source)
+        self.assertIn("function script.windowMain(dt)", source)
+
+    def test_forced_stage_failures_keep_recovery_visible(self) -> None:
+        cases = [("application-state", None), ("view-model", None), ("mode-render-compact", "compact"), ("mode-render-expanded", "expanded"), ("mode-render-garage", "garage")]
+        for stage, mode in cases:
+            result = stage_failure_smoke(DIST / "AVM_PitWall_F1.lua", stage, mode)
+            if not result.available:
+                self.skipTest(result.error or "Lua runtime unavailable")
+            self.assertTrue(result.passed, result.error)
+
+    def test_runtime_safety_scope(self) -> None:
+        bundle = (DIST / "AVM_PitWall_F1.lua").read_text(encoding="utf-8")
+        self.assertEqual(forbidden_patterns(bundle), [])
+        self.assertNotIn("function forecast_engine", bundle)
+        self.assertNotIn("function strategy_engine", bundle)
+        self.assertNotIn("Driver Bridge", bundle)
+        self.assertNotIn("Relay Server", bundle)
 
     def test_callback_smoke_is_explicit_about_runtime_backend(self) -> None:
         result = callback_smoke(DIST / "AVM_PitWall.lua")

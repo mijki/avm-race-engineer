@@ -195,8 +195,11 @@ def build(output_dir: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
     _write_text(output_dir / "manifest.ini", _normalise_text(APP_ROOT / "manifest" / "manifest.ini"))
     _write_text(output_dir / "README.md", _normalise_text(APP_ROOT / "README.md"))
     _write_text(output_dir / "asset-manifest.json", json.dumps(load_json(APP_ROOT / "asset-manifest.json"), indent=2, sort_keys=True) + "\n")
-    _write_text(output_dir / "AVM_PitWall.lua", bundle)
-    _write_text(output_dir / "script.lua", bundle)
+    for stale_name in ("AVM_PitWall.lua", "script.lua"):
+        stale_path = output_dir / stale_name
+        if stale_path.is_file():
+            stale_path.unlink()
+    _write_text(output_dir / "AVM_PitWall_F1.lua", bundle)
     asset_hashes = generate_sound_assets(package_assets)
 
     build_manifest: dict[str, Any] = {
@@ -209,8 +212,7 @@ def build(output_dir: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
         "included_asset_hashes": asset_hashes,
         "release_allowlist": [
             "manifest.ini",
-            "AVM_PitWall.lua",
-            "script.lua",
+            "AVM_PitWall_F1.lua",
             "README.md",
             "asset-manifest.json",
             "build-manifest.json",

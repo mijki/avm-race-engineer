@@ -1,0 +1,27 @@
+{
+  "schema_version": "f1-lua-module-manifest-v1",
+  "entry_module": "app",
+  "modules": [
+    {"id": "bootstrap", "source": "src/bootstrap.lua", "depends_on": []},
+    {"id": "runtime_native", "source": "src/runtime_native.lua", "depends_on": ["bootstrap"]},
+    {"id": "config", "source": "src/config.lua", "depends_on": ["bootstrap"]},
+    {"id": "contracts", "source": "src/contracts.lua", "depends_on": ["config"]},
+    {"id": "formatting", "source": "src/formatting.lua", "depends_on": ["config"]},
+    {"id": "adapters.csp", "source": "src/adapters/csp.lua", "depends_on": ["bootstrap"]},
+    {"id": "adapters.audio", "source": "src/adapters/audio.lua", "depends_on": ["bootstrap", "config"]},
+    {"id": "adapters.storage", "source": "src/adapters/storage.lua", "depends_on": ["bootstrap", "config"]},
+    {"id": "theme", "source": "src/ui/theme.lua", "depends_on": ["adapters.csp", "config"]},
+    {"id": "icons", "source": "src/ui/icons.lua", "depends_on": ["adapters.csp", "theme"]},
+    {"id": "layout", "source": "src/ui/layout.lua", "depends_on": ["config"]},
+    {"id": "components", "source": "src/ui/components.lua", "depends_on": ["adapters.csp", "theme", "icons"]},
+    {"id": "alert_state", "source": "src/alert_state.lua", "depends_on": ["config", "formatting"]},
+    {"id": "mock_scenarios", "source": "src/mock_scenarios.lua", "depends_on": ["config"]},
+    {"id": "view_model", "source": "src/view_model.lua", "depends_on": ["contracts", "formatting", "mock_scenarios"]},
+    {"id": "compact_mode", "source": "src/ui/compact_mode.lua", "depends_on": ["components", "layout", "view_model"]},
+    {"id": "expanded_mode", "source": "src/ui/expanded_mode.lua", "depends_on": ["components", "layout", "view_model"]},
+    {"id": "garage_mode", "source": "src/ui/garage_mode.lua", "depends_on": ["components", "layout", "mock_scenarios", "adapters.audio", "adapters.storage"]},
+    {"id": "fallback", "source": "src/ui/fallback.lua", "depends_on": ["runtime_native", "layout"]},
+    {"id": "app_state", "source": "src/app_state.lua", "depends_on": ["alert_state", "adapters.audio", "adapters.storage", "mock_scenarios", "view_model"]},
+    {"id": "app", "source": "src/app.lua", "depends_on": ["app_state", "components", "compact_mode", "expanded_mode", "garage_mode", "fallback", "adapters.csp", "runtime_native"]}
+  ]
+}

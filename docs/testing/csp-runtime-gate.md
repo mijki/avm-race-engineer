@@ -8,10 +8,23 @@ This gate protects the AVM PitWall runtime from design drift. Any phase that cha
 
 F1 is currently `host-complete; runtime-pending`.
 
+The corrective pass confirmed two source-level causes of the original blank
+window: the F1 manifest reused the V1 registration name and used
+`[WINDOW_MAIN]`, and the bundle exported `_G.windowMain` instead of the CSP app
+callback table. Installed CSP app examples and the SDK define the canonical
+shape as `script.windowMain(dt)` and use the folder-matching entry file
+`AVM_PitWall_F1.lua`. A manual manifest correction made discovery and window
+creation work, but the client remained blank, so callback execution is still
+not inferred from log absence.
+
 Completed host evidence:
 
 - foundation contract fixtures validate with the repository schemas;
-- the 20-module bundle graph is explicit, deterministic, and cycle-checked;
+- the 21-module bundle graph is explicit, deterministic, and cycle-checked;
+- the unique `AVM PitWall F1 Dev` registration uses `[WINDOW_...]` and the
+  canonical `script.windowMain(dt)` callback;
+- the first callback operation is a direct native CSP canary, followed by
+  narrow staged initialization and a direct native bounded recovery panel;
 - generated bundle parsing/inspection, forbidden loader/network scan, and
   local-symbol pressure checks pass;
 - deterministic package bytes and the release allowlist pass;
@@ -30,6 +43,11 @@ Pending runtime evidence:
 
 Host-side green status must not be interpreted as satisfying those pending
 items.
+
+The host gate now covers manifest/entry shape, four target-size visibility
+matrices, deterministic output, and forced-stage contract hooks. Dynamic
+callback and forced-failure execution remain pending when no Lua runtime is
+installed; the current environment has neither Lupa nor `lua`/`luac`.
 
 ## Gate Criteria
 

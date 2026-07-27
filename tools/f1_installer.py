@@ -60,8 +60,7 @@ def _release_files(package_dir: Path) -> list[Path]:
         raise InstallApplyError("release package is missing build-manifest.json")
     allowlist = {
         Path("manifest.ini"),
-        Path("AVM_PitWall.lua"),
-        Path("script.lua"),
+        Path("AVM_PitWall_F1.lua"),
         Path("README.md"),
         Path("asset-manifest.json"),
         Path("build-manifest.json"),
