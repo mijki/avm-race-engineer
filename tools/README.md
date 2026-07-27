@@ -1,6 +1,6 @@
 # Tools
 
-Status: `F1 implemented`
+Status: `F1 and F2 host tooling implemented`
 
 This directory contains developer, diagnostic, migration, and release support
 tooling. F1 tooling is dependency-free Python so a clean checkout can generate
@@ -30,6 +30,14 @@ only targets `apps/lua/AVM_PitWall_F1`.
 `f1_host.py` provides forbidden-pattern, local-count, parser-backend, and
 optional Lupa callback checks. If no Lua parser or Lupa runtime is installed,
 its static fallback is reported as inspection only and never as CSP proof.
+
+## F2 live tooling
+
+The same deterministic bundle and installer retain the F1 safety gates while
+including the live modules. `f1_fixture_builder.py` generates contract fixtures
+and validates the two live telemetry fixtures. `f1_validation.py` runs JSON,
+loader, bundle, Markdown, and renderer-literal scans. `live_model.py` is the
+dependency-free host oracle used because Lua/Lupa is unavailable here.
 
 Tooling should support the documented workflows in `docs/` rather than invent a
 parallel source of product truth.

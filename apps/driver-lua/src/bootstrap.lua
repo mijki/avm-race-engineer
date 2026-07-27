@@ -6,6 +6,7 @@ end
 
 namespace.version = "1.0.0-f1"
 namespace.modules = namespace.modules or {}
+namespace.live = namespace.live or {}
 namespace.adapters = namespace.adapters or {}
 namespace.ui = namespace.ui or {}
 namespace.runtime = namespace.runtime or {}
@@ -167,6 +168,7 @@ function runtime.begin_frame()
   lifecycle.entry_shell_drawn = false
   lifecycle.recovery_drawn = false
   runtime.render_evidence = new_render_evidence()
+  runtime.body_owner = nil
   runtime.set_render_phase("native")
 end
 

@@ -676,12 +676,26 @@ def build(output_root: Path = FIXTURE_ROOT) -> list[Path]:
     return written
 
 
+def validate_live_fixtures() -> int:
+    """Validate the bounded live fixtures used by the host telemetry oracle."""
+    fixture_dir = ROOT / "tests" / "fixtures"
+    fixtures = sorted(fixture_dir.glob("live_telemetry_*.json"))
+    if len(fixtures) < 2:
+        raise ValueError("at least two live telemetry fixtures are required")
+    for path in fixtures:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not payload.get("identity") or not payload.get("car") or not payload.get("session"):
+            raise ValueError(f"fixture is incomplete: {path}")
+    return len(fixtures)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=FIXTURE_ROOT)
     args = parser.parse_args()
     for path in build(args.output):
         print(path.relative_to(ROOT))
+    print(f"validated {validate_live_fixtures()} live telemetry fixtures")
     return 0
 
 

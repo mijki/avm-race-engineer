@@ -79,4 +79,31 @@ function contracts.optional_number(value)
   return nil
 end
 
+function contracts.metric(value, unit, samples, freshness_s, confidence, reason)
+  return {
+    value = value,
+    unit = unit,
+    sample_count = samples or 0,
+    freshness_s = freshness_s,
+    confidence_band = confidence or (value == nil and "low" or "medium"),
+    reason = reason,
+  }
+end
+
+function contracts.unavailable(unit, reason, samples, freshness_s)
+  return contracts.metric(nil, unit, samples or 0, freshness_s, "low", reason or "UNAVAILABLE")
+end
+
+function contracts.identity(snapshot)
+  local identity = snapshot and snapshot.identity or {}
+  return {
+    car_id = identity.car_id,
+    track_id = identity.track_id,
+    layout_id = identity.layout_id,
+    session_id = identity.session_id,
+    driver_name = identity.driver_name,
+    key = identity.key,
+  }
+end
+
 namespace.contracts = contracts

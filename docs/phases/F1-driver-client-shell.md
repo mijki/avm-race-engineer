@@ -202,6 +202,15 @@ acknowledgement UX before real transport exists.
 
 medium
 
+## F2 successor
+
+F1 established the CSP shell and deterministic mock-only baseline. F2 preserves
+the build and safety constraints while replacing the normal race source with
+live CSP telemetry. Deterministic mock values are now diagnostics-only.
+
+See [F2: Live Telemetry Driver Experience](F2-live-telemetry.md) for the
+current active driver-client slice.
+
 ## Clean-Thread Recommendation
 
 Yes - move bridge work into a new thread once the client shell constraints are

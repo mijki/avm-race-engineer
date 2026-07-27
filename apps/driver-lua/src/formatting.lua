@@ -94,4 +94,65 @@ function formatting.mode_label(mode)
   return "COMPACT RACE"
 end
 
+function formatting.metric(metric, places, unavailable)
+  if type(metric) ~= "table" or metric.value == nil then
+    return unavailable or formatting.reason(metric and metric.reason)
+  end
+  return formatting.number(metric.value, places or 1, metric.unit or "")
+end
+
+function formatting.duration(seconds)
+  return formatting.time(seconds, "--:--")
+end
+
+function formatting.reason(reason)
+  local readable = {
+    MEASURED_CURRENT = "Measured now",
+    NO_TRUSTWORTHY_CONSTRAINT = "No trustworthy constraint",
+    NO_TRUSTWORTHY_FUTURE_CHANGE = "No reliable future forecast",
+    LOW_CONFIDENCE = "Low confidence",
+    INSUFFICIENT_SAMPLES = "Waiting for representative laps",
+    PIT_ENTRY_NOT_CALIBRATED = "Pit entry not calibrated",
+    PIT_ENTRY_WRAPAROUND_APPLIED = "Pit entry after start/finish",
+    STALE_TELEMETRY = "Live telemetry is stale",
+    SOURCE_UNAVAILABLE = "Live source unavailable",
+    IDENTITY_CHANGED = "Session identity changed",
+    SESSION_RESTART = "Session restarted",
+    INVALID_LAP = "Lap excluded from model",
+    PIT_LAP_EXCLUDED = "Pit lap excluded from model",
+    WET_LAP_EXCLUDED = "Wet lap excluded from model",
+    CAUTION_LAP_EXCLUDED = "Caution lap excluded from model",
+    REFUEL_TRANSITION = "Refuel transition excluded",
+  }
+  return readable[reason] or (reason and tostring(reason) or "Unavailable")
+end
+
+function formatting.weather_type(value)
+  if value == nil or value == "" then
+    return "Unavailable"
+  end
+  local text = tostring(value):match("([^%.]+)$") or tostring(value)
+  text = text:gsub("_", " "):lower()
+  return text:sub(1, 1):upper() .. text:sub(2)
+end
+
+function formatting.session_type(value)
+  if value == nil or value == "" then
+    return "Session unavailable"
+  end
+  local text = tostring(value):match("([^%.]+)$") or tostring(value)
+  return text:gsub("_", " "):upper()
+end
+
+function formatting.readable_tyre_state(value)
+  local labels = {
+    COLD = "Cold",
+    OPTIMAL = "In range",
+    HOT = "Hot",
+    WORN = "Worn",
+    UNKNOWN = "Unknown",
+  }
+  return labels[value] or formatting.weather_type(value)
+end
+
 namespace.formatting = formatting

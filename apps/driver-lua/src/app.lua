@@ -199,6 +199,15 @@ function app.windowMain(dt)
   log_once("scenario_logged", "default scenario selected=" .. tostring(state.scenario_id))
   log_once("mode_logged", "default mode selected=" .. tostring(state.mode))
 
+  local live_ok, live_error = run_stage("live-telemetry", function()
+    local status = namespace.app_state.update(dt)
+    assert(type(status) == "table", "live telemetry status unavailable")
+  end)
+  if not live_ok then
+    recover("live-telemetry", live_error)
+    return
+  end
+
   local snapshot_ok, snapshot_error = run_stage("default-fixture", function()
     assert(type(state.envelope) == "table", "deterministic fixture unavailable")
   end)
@@ -240,10 +249,12 @@ function app.windowMain(dt)
   local selected_mode_ok, selected_mode_error = run_stage("selected-mode", function()
     runtime.set_render_mode(state.mode)
     local enhanced_ok, enhanced_error = render_enhanced_mode(vm, boxes, state)
-    runtime.set_render_phase("mode_text")
-    render_text_first(vm, state)
     if not enhanced_ok then
+      runtime.set_render_phase("mode_text")
+      render_text_first(vm, state)
       runtime.log_once("enhanced_fallback_logged", "enhanced renderer unavailable: " .. tostring(enhanced_error or "unknown reason") .. "; text-first mode retained")
+    else
+      runtime.set_render_phase("none")
     end
     runtime.capabilities.enhanced = enhanced_ok
     log_capabilities(runtime.capabilities)
@@ -295,8 +306,7 @@ function app.windowMain(dt)
 end
 
 function app.reset_for_test()
-  namespace.app_state.initialized = false
-  namespace.app_state.dirty = true
+  namespace.app_state.reset_for_test()
   for key in pairs(lifecycle) do
     lifecycle[key] = nil
   end
@@ -304,4 +314,4 @@ end
 
 namespace.app = app
 runtime.app_entry = app.windowMain
-runtime.log_once("app_entry_registered_logged", "application entry registered")
+  runtime.log_once("app_entry_registered_logged", "application entry registered")

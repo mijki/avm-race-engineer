@@ -69,7 +69,7 @@ class F1DriverLuaTests(unittest.TestCase):
     def test_module_graph_is_ordered_and_complete(self) -> None:
         modules = load_modules()
         positions = {module.module_id: index for index, module in enumerate(modules)}
-        self.assertEqual(len(modules), 21)
+        self.assertEqual(len(modules), 31)
         for module in modules:
             for dependency in module.depends_on:
                 self.assertLess(positions[dependency], positions[module.module_id])

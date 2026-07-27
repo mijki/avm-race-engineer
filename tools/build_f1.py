@@ -16,7 +16,7 @@ from typing import Any
 
 try:
     from tools.f1_validation import ValidationError, load_json
-except ModuleNotFoundError:  # direct ``python tools/build_f1.py`` invocation
+except ModuleNotFoundError:
     from f1_validation import ValidationError, load_json
 
 
@@ -55,6 +55,7 @@ def load_modules(manifest_path: Path = MODULE_MANIFEST) -> list[Module]:
         raise ValidationError(f"{manifest_path}: modules must be a non-empty list")
     modules: list[Module] = []
     seen: set[str] = set()
+    source_root = manifest_path.parent.parent if manifest_path.parent.name == "build" else manifest_path.parent
     for raw in raw_modules:
         if not isinstance(raw, dict):
             raise ValidationError(f"{manifest_path}: module entry must be an object")
@@ -67,17 +68,15 @@ def load_modules(manifest_path: Path = MODULE_MANIFEST) -> list[Module]:
             raise ValidationError(f"{manifest_path}: {module_id}: source is required")
         if not isinstance(depends_on, list) or any(not isinstance(item, str) for item in depends_on):
             raise ValidationError(f"{manifest_path}: {module_id}: depends_on must be strings")
-        seen.add(module_id)
-        source_root = manifest_path.parent.parent if manifest_path.parent.name == "build" else manifest_path.parent
         source = source_root / source_name
         if not source.is_file():
             raise ValidationError(f"{manifest_path}: {module_id}: missing source {source_name}")
+        seen.add(module_id)
         modules.append(Module(module_id, source, tuple(depends_on)))
     for module in modules:
         for dependency in module.depends_on:
             if dependency not in seen:
                 raise ValidationError(f"{manifest_path}: {module.module_id}: missing dependency {dependency!r}")
-
     by_id = {module.module_id: module for module in modules}
     ordered: list[Module] = []
     visiting: set[str] = set()
@@ -134,8 +133,8 @@ def bundle_source(modules: list[Module]) -> tuple[str, dict[str, str]]:
         source = _normalise_text(module.source)
         digest = sha256_bytes(source.encode("utf-8"))
         source_hashes[module.module_id] = digest
-        source_label = module.source.relative_to(APP_ROOT).as_posix()
-        chunks.append(f"-- BEGIN MODULE {module.module_id} ({source_label}) sha256={digest}")
+        label = module.source.relative_to(APP_ROOT).as_posix()
+        chunks.append(f"-- BEGIN MODULE {module.module_id} ({label}) sha256={digest}")
         chunks.append("do")
         chunks.extend(f"  {line}" if line else "" for line in source.split("\n"))
         chunks.extend(["end", f"-- END MODULE {module.module_id}", ""])
@@ -153,28 +152,21 @@ def _tone_samples(duration_s: float, frequencies: tuple[float, ...], gap_s: floa
             envelope = min(1.0, index / (sample_rate * 0.012), (tone_length - index) / (sample_rate * 0.035))
             parts.append(math.sin(2.0 * math.pi * frequency * index / sample_rate) * 0.28 * max(0.0, envelope))
         parts.extend([0.0] * gap)
-    values = [max(-32767, min(32767, int(sample * 32767))) for sample in parts[:total]]
-    return b"".join(struct.pack("<h", value) for value in values)
+    return b"".join(struct.pack("<h", max(-32767, min(32767, int(sample * 32767)))) for sample in parts[:total])
 
 
 def generate_sound_assets(asset_root: Path) -> dict[str, str]:
-    sound_specs = {
-        "info.wav": (0.22, (660.0,), 0.0),
-        "warning.wav": (0.42, (540.0, 720.0), 0.055),
-        "critical.wav": (0.52, (390.0, 390.0), 0.065),
-        "ack.wav": (0.18, (880.0,), 0.0),
-    }
+    sound_specs = {"info.wav": (0.22, (660.0,), 0.0), "warning.wav": (0.42, (540.0, 720.0), 0.055), "critical.wav": (0.52, (390.0, 390.0), 0.065), "ack.wav": (0.18, (880.0,), 0.0)}
     sound_dir = asset_root / "sounds"
     sound_dir.mkdir(parents=True, exist_ok=True)
     hashes: dict[str, str] = {}
     for filename, (duration, frequencies, gap) in sound_specs.items():
         path = sound_dir / filename
-        frames = _tone_samples(duration, frequencies, gap)
         with wave.open(str(path), "wb") as stream:
             stream.setnchannels(1)
             stream.setsampwidth(2)
             stream.setframerate(44100)
-            stream.writeframes(frames)
+            stream.writeframes(_tone_samples(duration, frequencies, gap))
         hashes[f"assets/sounds/{filename}"] = sha256_file(path)
     return hashes
 
@@ -189,9 +181,6 @@ def build(output_dir: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
     validate_asset_manifest()
     bundle, source_hashes = bundle_source(modules)
     output_dir.mkdir(parents=True, exist_ok=True)
-    package_assets = output_dir / "assets"
-    package_assets.mkdir(parents=True, exist_ok=True)
-
     _write_text(output_dir / "manifest.ini", _normalise_text(APP_ROOT / "manifest" / "manifest.ini"))
     _write_text(output_dir / "README.md", _normalise_text(APP_ROOT / "README.md"))
     _write_text(output_dir / "asset-manifest.json", json.dumps(load_json(APP_ROOT / "asset-manifest.json"), indent=2, sort_keys=True) + "\n")
@@ -200,8 +189,7 @@ def build(output_dir: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
         if stale_path.is_file():
             stale_path.unlink()
     _write_text(output_dir / "AVM_PitWall_F1.lua", bundle)
-    asset_hashes = generate_sound_assets(package_assets)
-
+    asset_hashes = generate_sound_assets(output_dir / "assets")
     build_manifest: dict[str, Any] = {
         "schema_version": "f1-build-manifest-v1",
         "tool_version": "1.0.0",
@@ -210,26 +198,13 @@ def build(output_dir: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
         "source_file_hashes": source_hashes,
         "bundle_sha256": sha256_bytes(bundle.encode("utf-8")),
         "included_asset_hashes": asset_hashes,
-        "release_allowlist": [
-            "manifest.ini",
-            "AVM_PitWall_F1.lua",
-            "README.md",
-            "asset-manifest.json",
-            "build-manifest.json",
-            "assets/sounds/info.wav",
-            "assets/sounds/warning.wav",
-            "assets/sounds/critical.wav",
-            "assets/sounds/ack.wav",
-        ],
+        "release_allowlist": ["manifest.ini", "AVM_PitWall_F1.lua", "README.md", "asset-manifest.json", "build-manifest.json", "assets/sounds/info.wav", "assets/sounds/warning.wav", "assets/sounds/critical.wav", "assets/sounds/ack.wav"],
     }
-    _write_text(output_dir / "build-manifest.json", json.dumps(build_manifest, indent=2, sort_keys=True) + "\n")
     build_manifest["package_file_hashes"] = {
         path.relative_to(output_dir).as_posix(): sha256_file(path)
         for path in sorted(output_dir.rglob("*"))
         if path.is_file() and path.name != "build-manifest.json"
     }
-    # Rewriting the manifest after adding package hashes is deterministic; the
-    # manifest deliberately excludes its own hash to avoid a self-reference.
     _write_text(output_dir / "build-manifest.json", json.dumps(build_manifest, indent=2, sort_keys=True) + "\n")
     return build_manifest
 
@@ -240,16 +215,13 @@ def _tree_bytes(root: Path) -> dict[str, bytes]:
 
 def verify_deterministic() -> None:
     with tempfile.TemporaryDirectory(prefix="avm-f1-build-") as temp:
-        first = Path(temp) / "first"
-        second = Path(temp) / "second"
+        first, second = Path(temp) / "first", Path(temp) / "second"
         build(first)
         build(second)
-        left = _tree_bytes(first)
-        right = _tree_bytes(second)
+        left, right = _tree_bytes(first), _tree_bytes(second)
         if left != right:
             names = sorted(set(left) | set(right))
-            differing = [name for name in names if left.get(name) != right.get(name)]
-            raise ValidationError(f"deterministic build mismatch: {differing}")
+            raise ValidationError(f"deterministic build mismatch: {[name for name in names if left.get(name) != right.get(name)]}")
 
 
 def main() -> int:

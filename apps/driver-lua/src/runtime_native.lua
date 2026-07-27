@@ -88,6 +88,10 @@ function native.window_size()
   return 780, 380
 end
 
+function native.has_draw_api()
+  return member(ui_api(), "drawText") ~= nil and member(ui_api(), "drawRectFilled") ~= nil
+end
+
 function native.fill(x, y, width, height, fill_color, rounding)
   local first = point(x, y)
   local second = point(x + math.max(1, width), y + math.max(1, height))

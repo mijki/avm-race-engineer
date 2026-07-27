@@ -1,0 +1,7 @@
+{
+  "identity": {"car_id": "fixture-car-a", "track_id": "fixture-track", "layout_id": "main", "driver_name": "Fixture Driver", "session_id": "session-a", "configuration_id": "fixture-car-a@fixture-track"},
+  "session": {"type": "PRACTICE", "elapsed_s": 120, "remaining_s": 900, "lap_limit": null, "completed_laps": 2, "current_lap": 3, "position": 3, "total_cars": 10, "track_length_m": 5000, "paused": false, "replay": false, "active": true, "finished": false},
+  "car": {"speed_kmh": 180, "fuel_l": 40, "fuel_capacity_l": 60, "spline": 0.81, "distance_session_km": 12, "pit_lane": false, "pit_box": false, "lap_time_s": 100, "previous_lap_time_s": 99, "best_lap_time_s": 98, "lap_valid": true, "previous_lap_valid": true, "last_lap_cuts": 0},
+  "tyres": {"compound": "medium", "core_c": 90, "surface_c": 86, "wear": 0.12, "pressure_kpa": 180, "optimum_c": 92},
+  "environment": {"ambient_c": 20, "road_c": 29, "wind_kmh": 7, "weather_type": "clear", "rain_intensity": 0, "track_wetness": 0, "standing_water": 0, "grip": 0.98}
+}

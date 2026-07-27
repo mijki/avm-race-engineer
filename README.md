@@ -5,8 +5,8 @@ Assetto Corsa and Custom Shaders Patch.
 
 ## Current Status
 
-This repository is in the foundation and architecture phase as of 2026-07-26.
-No production release exists yet. Product and UX documents in this repository
+The F2 live-driver vertical slice is host-implemented as of 2026-07-27; no
+production release exists yet. Product and UX documents in this repository
 describe either:
 
 - `Reference` behavior inherited from the previous V1 implementation

@@ -200,6 +200,16 @@ and CSP result. A host-only run must leave the F1 status runtime-pending.
 | F2-F4 | advisory unless PitWall-facing contracts change | bridge, relay, and console phases still record compatibility impact |
 | F5-F12 | required | client-participating phases need real AC/CSP validation |
 
+## F2 live-driver evidence
+
+The F2 host gate additionally checks two deliberately different telemetry
+fixtures, explicit LIVE/MOCK/RECOVERY source ownership, no renderer race
+literal scan, normalized CSP field coverage, bounded samples, pit-entry
+calibration equations, measured-weather-only output, and deterministic bundle
+hashing. The real gate remains open until interactive Assetto Corsa evidence is
+recorded; host checks cannot prove that fuel, lap, stint, tyre, and weather
+values update in a running session.
+
 ## Related Documents
 
 - [Testing Strategy](./testing-strategy.md)

@@ -262,14 +262,14 @@ recommendation.
 - Garage/Diagnostics Mode may assume a larger stationary view, but still should
   avoid deep nesting and scrolling for the most important readiness states
 
-## Status Note
+## F2 implementation note
 
-F1 implements the three mode compositions, fixed race hierarchy, explicit
-unavailable/stale/unknown framing, bounded visual alert acknowledgement and
-repeat behavior, and deterministic mock scenario selection. The F1 shell has
-no TTS, networking, live telemetry, setup application, or production strategy
-calculation. Real CSP render and interaction evidence remains pending under the
-[CSP Runtime Gate](../testing/csp-runtime-gate.md).
+The integrated F1/F2 client implements the three mode compositions, fixed race
+hierarchy, explicit unavailable/stale/unknown framing, bounded visual alert
+acknowledgement and repeat behavior, deterministic contract fixtures, and
+local live telemetry normalization. The client has no TTS, networking, setup
+application, or production strategy calculation. Real CSP render and
+interaction evidence remains pending under the [CSP Runtime Gate](../testing/csp-runtime-gate.md).
 
 ### F1 composition notes
 
@@ -278,8 +278,21 @@ calculation. Real CSP render and interaction evidence remains pending under the
   connection state.
 - Expanded Race adds elapsed/remaining/target timing, a larger engineer region,
   richer fuel/pace/tyre/pit cards, a reduced weather timeline, and health state.
-- Garage/Diagnostics exposes all 18 mock scenario IDs, presentation/audio
-  controls, source/contract/audio status, and the explicit statement that F1
-  cannot change live strategy or setup state.
+- Garage/Diagnostics exposes source status, raw telemetry, bounded sample
+  counts, traceability, pit-entry calibration, presentation/audio controls,
+  and Garage-only mock controls. It never changes live strategy or setup state.
 - The fallback shell keeps product identity, failure stage, and recovery copy
   visible when a snapshot is malformed or a render stage raises an error.
+The live slice extends the stable hierarchy as a code-defined dark-charcoal
+layout. Compact mode is the default and shows stint timing, fuel/range and pit
+entry, pace/tyres, measured weather/track, and one engineer line. Expanded mode
+adds calculation detail without scrolling. Garage exposes raw state, sample
+counts, traceability, calibration, and the explicit MOCK controls.
+
+Visible dynamic fields are reduced in view_model.lua; race renderers do not
+call CSP telemetry APIs or contain scenario values. When no trusted future
+source exists the text is exactly No reliable future forecast.
+
+The command, acknowledgement, TTS, and remote connection portions remain
+planned. The live local telemetry, calculations, and three-mode visual slice
+are implemented; interactive CSP validation is still pending.

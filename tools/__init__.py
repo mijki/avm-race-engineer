@@ -1,1 +1,1 @@
-"""Repository tooling for AVM Race Engineer."""
+"""Repository and host-side tooling for AVM Race Engineer."""

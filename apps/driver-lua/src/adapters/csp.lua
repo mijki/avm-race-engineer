@@ -452,3 +452,262 @@ end
 csp.backend = "csp-native"
 namespace.adapters = namespace.adapters or {}
 namespace.adapters.csp = csp
+
+-- Live telemetry remains behind the CSP adapter. UI modules only consume the
+-- normalized snapshot produced here and never inspect the raw CSP objects.
+local telemetry_fixture = nil
+
+local function telemetry_finite(value)
+  return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
+local function telemetry_field(object, name)
+  if object == nil then
+    return nil
+  end
+  local ok, value = pcall(function() return object[name] end)
+  if ok and value ~= nil and type(value) ~= "function" then
+    return value
+  end
+  return nil
+end
+
+local function telemetry_call(object, name, ...)
+  local callback = telemetry_field(object, name)
+  if not callable(callback) then
+    return nil
+  end
+  local ok, value = pcall(callback, object, ...)
+  return ok and value or nil
+end
+
+local function telemetry_first(object, names)
+  for index = 1, #names do
+    local value = telemetry_field(object, names[index])
+    if value ~= nil then
+      return value
+    end
+  end
+  return nil
+end
+
+local function telemetry_optional_method(object, names)
+  for index = 1, #names do
+    local value = telemetry_call(object, names[index])
+    if value ~= nil then
+      return value
+    end
+  end
+  return nil
+end
+
+function csp.set_mock_fixture(fixture)
+  telemetry_fixture = fixture
+end
+
+function csp.clear_mock_fixture()
+  telemetry_fixture = nil
+end
+
+function csp.normalize(raw, observed_monotonic_s, source_mode)
+  if type(raw) ~= "table" then
+    return nil, "SOURCE_UNAVAILABLE"
+  end
+  local identity = raw.identity or {}
+  local session = raw.session or {}
+  local car = raw.car or {}
+  local tyres = raw.tyres or {}
+  local environment = raw.environment or {}
+  return {
+    source_mode = source_mode or raw.source_mode or "live",
+    observed_monotonic_s = observed_monotonic_s,
+    identity = {
+      car_id = identity.car_id,
+      track_id = identity.track_id,
+      layout_id = identity.layout_id,
+      driver_name = identity.driver_name,
+      session_id = identity.session_id,
+      configuration_id = identity.configuration_id,
+    },
+    session = {
+      type = session.type,
+      elapsed_s = session.elapsed_s,
+      remaining_s = session.remaining_s,
+      lap_limit = session.lap_limit,
+      track_length_m = session.track_length_m,
+      completed_laps = session.completed_laps,
+      current_lap = session.current_lap,
+      position = session.position,
+      total_cars = session.total_cars,
+      paused = session.paused == true,
+      replay = session.replay == true,
+      active = session.active ~= false,
+      finished = session.finished == true,
+    },
+    car = {
+      speed_kmh = car.speed_kmh,
+      fuel_l = car.fuel_l,
+      fuel_capacity_l = car.fuel_capacity_l,
+      spline = car.spline,
+      distance_session_km = car.distance_session_km,
+      pit_lane = car.pit_lane == true,
+      pit_box = car.pit_box == true,
+      lap_time_s = car.lap_time_s,
+      previous_lap_time_s = car.previous_lap_time_s,
+      best_lap_time_s = car.best_lap_time_s,
+      lap_valid = car.lap_valid,
+      previous_lap_valid = car.previous_lap_valid,
+      last_lap_cuts = car.last_lap_cuts,
+      reset_counter = car.reset_counter,
+    },
+    tyres = {
+      compound = tyres.compound,
+      core_c = tyres.core_c,
+      surface_c = tyres.surface_c,
+      wear = tyres.wear,
+      pressure_kpa = tyres.pressure_kpa,
+      optimum_c = tyres.optimum_c,
+    },
+    environment = {
+      ambient_c = environment.ambient_c,
+      road_c = environment.road_c,
+      wind_kmh = environment.wind_kmh,
+      weather_type = environment.weather_type,
+      rain_intensity = environment.rain_intensity,
+      track_wetness = environment.track_wetness,
+      standing_water = environment.standing_water,
+      grip = environment.grip,
+    },
+  }
+end
+
+local function telemetry_average(sum, count)
+  return count > 0 and sum / count or nil
+end
+
+local function read_live_telemetry()
+  local ac_api = rawget(_G, "ac")
+  if type(ac_api) ~= "table" then
+    return nil, "SOURCE_UNAVAILABLE"
+  end
+  local get_sim = telemetry_field(ac_api, "getSim")
+  local get_car = telemetry_field(ac_api, "getCar")
+  if not callable(get_sim) or not callable(get_car) then
+    return nil, "SOURCE_UNAVAILABLE"
+  end
+  local ok_sim, sim = pcall(get_sim)
+  local ok_car, car = pcall(get_car, 0)
+  if not ok_sim or not ok_car or sim == nil or car == nil then
+    return nil, "SOURCE_UNAVAILABLE"
+  end
+  local session_index = telemetry_field(sim, "currentSessionIndex") or 0
+  local session = nil
+  local get_session = telemetry_field(ac_api, "getSession")
+  if callable(get_session) then
+    local ok_session, value = pcall(get_session, session_index)
+    if ok_session then session = value end
+  end
+  local get_track_id = telemetry_field(ac_api, "getTrackID")
+  local get_layout = telemetry_field(ac_api, "getTrackLayout")
+  local get_full_id = telemetry_field(ac_api, "getTrackFullID")
+  local track_id = callable(get_track_id) and select(2, pcall(get_track_id)) or nil
+  local layout_id = callable(get_layout) and select(2, pcall(get_layout)) or nil
+  local full_id = callable(get_full_id) and select(2, pcall(get_full_id, "::")) or nil
+  local car_id = telemetry_optional_method(car, { "id" }) or telemetry_field(car, "id")
+  local car_name = telemetry_optional_method(car, { "name" }) or telemetry_field(car, "name")
+  local driver_name = telemetry_optional_method(car, { "driverName" }) or telemetry_field(car, "driverName")
+  local wheels = telemetry_field(car, "wheels") or {}
+  local core_sum, surface_sum, pressure_sum, wear_sum, optimum_sum, wheel_count = 0, 0, 0, 0, 0, 0
+  for index = 0, 3 do
+    local wheel = wheels[index] or wheels[index + 1]
+    if wheel ~= nil then
+      local core = telemetry_first(wheel, { "tyreCoreTemperature", "coreTemperature" })
+      local surface = telemetry_first(wheel, { "tyreMiddleTemperature", "tyreSurfaceTemperature", "surfaceTemperature" })
+      local pressure = telemetry_first(wheel, { "tyrePressure", "pressure" })
+      local wear = telemetry_first(wheel, { "tyreWear", "wear" })
+      local optimum = telemetry_first(wheel, { "tyreOptimumTemperature", "optimumTemperature" })
+      if telemetry_finite(core) then core_sum = core_sum + core end
+      if telemetry_finite(surface) then surface_sum = surface_sum + surface end
+      if telemetry_finite(pressure) then pressure_sum = pressure_sum + pressure end
+      if telemetry_finite(wear) then wear_sum = wear_sum + wear end
+      if telemetry_finite(optimum) then optimum_sum = optimum_sum + optimum end
+      if core ~= nil or surface ~= nil or pressure ~= nil or wear ~= nil then wheel_count = wheel_count + 1 end
+    end
+  end
+  local sim_time_ms = telemetry_field(sim, "time")
+  local sim_time = type(sim_time_ms) == "number" and sim_time_ms / 1000 or telemetry_field(sim, "gameTime")
+  local lap_count = telemetry_field(car, "lapCount")
+  local raw = {
+    source_mode = "live",
+    identity = {
+      car_id = car_id or car_name,
+      track_id = track_id,
+      layout_id = layout_id,
+      driver_name = driver_name,
+      session_id = tostring(session_index) .. ":" .. tostring(telemetry_field(session, "startTime") or ""),
+      configuration_id = tostring(car_id or car_name or "") .. "@" .. tostring(full_id or track_id or ""),
+    },
+    session = {
+      type = telemetry_field(sim, "raceSessionType"),
+      elapsed_s = telemetry_field(sim, "currentSessionTime") and telemetry_field(sim, "currentSessionTime") / 1000 or telemetry_field(sim, "gameTime"),
+      remaining_s = telemetry_field(sim, "sessionTimeLeft") and telemetry_field(sim, "sessionTimeLeft") / 1000 or nil,
+      lap_limit = telemetry_field(session, "laps"),
+      track_length_m = telemetry_field(sim, "trackLengthM"),
+      completed_laps = lap_count,
+      current_lap = type(lap_count) == "number" and lap_count + 1 or nil,
+      position = telemetry_field(car, "racePosition"),
+      total_cars = telemetry_field(sim, "carsCount"),
+      paused = telemetry_field(sim, "isPaused"),
+      replay = telemetry_field(sim, "isReplayActive") or telemetry_field(sim, "isReplayOnlyMode"),
+      active = telemetry_field(sim, "isLive") or telemetry_field(sim, "isSessionStarted"),
+      finished = telemetry_field(sim, "isSessionFinished") or telemetry_field(session, "isOver"),
+    },
+    car = {
+      speed_kmh = telemetry_field(car, "speedKmh"),
+      fuel_l = telemetry_field(car, "fuel"),
+      fuel_capacity_l = telemetry_field(car, "maxFuel"),
+      spline = telemetry_field(car, "splinePosition"),
+      distance_session_km = telemetry_field(car, "distanceDrivenSessionKm"),
+      pit_lane = telemetry_field(car, "isInPitlane"),
+      pit_box = telemetry_field(car, "isInPit"),
+      lap_time_s = telemetry_field(car, "lapTimeMs") and telemetry_field(car, "lapTimeMs") / 1000 or nil,
+      previous_lap_time_s = telemetry_field(car, "previousLapTimeMs") and telemetry_field(car, "previousLapTimeMs") / 1000 or nil,
+      best_lap_time_s = telemetry_field(car, "bestLapTimeMs") and telemetry_field(car, "bestLapTimeMs") / 1000 or nil,
+      lap_valid = telemetry_field(car, "isLapValid"),
+      previous_lap_valid = telemetry_field(car, "isLastLapValid"),
+      last_lap_cuts = telemetry_field(car, "lastLapCutsCount"),
+      reset_counter = telemetry_field(car, "resetCounter"),
+    },
+    tyres = {
+      compound = telemetry_optional_method(car, { "tyresName" }),
+      core_c = telemetry_average(core_sum, wheel_count),
+      surface_c = telemetry_average(surface_sum, wheel_count),
+      wear = telemetry_average(wear_sum, wheel_count),
+      pressure_kpa = telemetry_average(pressure_sum, wheel_count) and telemetry_average(pressure_sum, wheel_count) / 100 or nil,
+      optimum_c = telemetry_average(optimum_sum, wheel_count),
+    },
+    environment = {
+      ambient_c = telemetry_field(sim, "ambientTemperature"),
+      road_c = telemetry_field(sim, "roadTemperature"),
+      wind_kmh = telemetry_field(sim, "windSpeedKmh"),
+      weather_type = telemetry_field(sim, "weatherType"),
+      rain_intensity = telemetry_field(sim, "rainIntensity"),
+      track_wetness = telemetry_field(sim, "rainWetness"),
+      standing_water = telemetry_field(sim, "rainWater"),
+      grip = telemetry_field(sim, "roadGrip"),
+    },
+    observed_monotonic_s = sim_time,
+  }
+  return raw, nil
+end
+
+function csp.read(source_mode, now_s)
+  if source_mode == "mock" then
+    if telemetry_fixture == nil then return nil, "SOURCE_UNAVAILABLE" end
+    return csp.normalize(telemetry_fixture, now_s, "mock")
+  end
+  if source_mode ~= "live" then return nil, "SOURCE_UNAVAILABLE" end
+  local raw, reason = read_live_telemetry()
+  if raw == nil then return nil, reason end
+  return csp.normalize(raw, now_s, "live")
+end

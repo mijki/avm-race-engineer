@@ -1,6 +1,6 @@
 # AVM PitWall
 
-Status: `Host-complete; CSP runtime pending`
+Status: `F1 runtime and F2 live slice host-implemented; real CSP validation pending`
 
 AVM PitWall is the compact in-car CSP Lua client. It is the driver-facing AVM
 surface and therefore carries the strictest safety constraints.
@@ -33,9 +33,10 @@ surface and therefore carries the strictest safety constraints.
 - The shell has exactly three modes: Compact Race, Expanded Race, and
   Garage/Diagnostics. Race modes are fixed single-screen compositions with no
   scrolling child UI.
-- F1 consumes deterministic fixtures only. It has no networking, live
-  telemetry, production weather or strategy calculation, setup application, or
-  arbitrary numeric editing.
+- F1 contract fixtures remain deterministic and host-testable. The F2 slice
+  adds local CSP telemetry normalization and bounded calculations without
+  networking, production weather or strategy calculation, setup application,
+  or arbitrary numeric editing.
 - The host gate covers the bundled-runtime correction, including callback timing
   and forced stage hooks. A real in-game CSP callback/render gate remains
   explicitly pending and is not represented as passed by host tests.
@@ -96,3 +97,17 @@ rollback backup outside the application target.
 
 See [docs/ux/driver-client-ux.md](../../docs/ux/driver-client-ux.md) and
 [docs/architecture/lua-source-and-build-architecture.md](../../docs/architecture/lua-source-and-build-architecture.md).
+
+## F2 live-driver implementation
+
+Status: host-implemented; real CSP validation pending.
+
+The default source is LIVE CSP telemetry through src/adapters/csp.lua.
+Normalized state flows through identity, lap, stint, bounded sample, weather,
+track-model, and pure local-calculation modules into one driver-status view
+model. The local calculation model is explicitly temporary and
+non-authoritative; Driver Bridge remains the planned production owner.
+
+MOCK is available only from Garage diagnostics. Malformed or unavailable LIVE
+data enters RECOVERY and never becomes mock data. Race renderers contain no
+scenario-specific values and show explicit unavailable text.

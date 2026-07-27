@@ -41,5 +41,15 @@ function theme.tone(name)
   return theme.color("text")
 end
 
+function theme.metric_color(metric)
+  if type(metric) ~= "table" then
+    return theme.color("muted")
+  end
+  if metric.confidence_band == "low" then
+    return theme.color("amber")
+  end
+  return theme.color("text")
+end
+
 namespace.ui = namespace.ui or {}
 namespace.ui.theme = theme
