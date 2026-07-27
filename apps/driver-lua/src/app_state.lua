@@ -40,11 +40,14 @@ local function load_scenario(id)
   state.dirty = true
 end
 
-function state.initialize()
+function state.initialize(settings_override)
   if state.initialized then
     return state
   end
-  state.settings = namespace.adapters.storage.load()
+  state.settings = settings_override or namespace.adapters.storage.load()
+  if type(state.settings) ~= "table" then
+    state.settings = namespace.adapters.storage.defaults()
+  end
   state.mode = state.settings.mode or namespace.config.default_mode
   if state.mode ~= "compact" and state.mode ~= "expanded" and state.mode ~= "garage" then
     state.mode = namespace.config.default_mode
@@ -54,8 +57,8 @@ function state.initialize()
   return state
 end
 
-function state.ensure()
-  return state.initialize()
+function state.ensure(settings_override)
+  return state.initialize(settings_override)
 end
 
 function state.update(dt)

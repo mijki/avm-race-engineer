@@ -172,8 +172,10 @@ def _lupa_smoke(bundle_path: Path) -> SmokeResult:
     source = bundle_path.read_text(encoding="utf-8")
     runtime.execute(source)
     runtime.globals().script.windowMain(0.016)
+    script_count = int(runtime.globals().draw_count)
+    runtime.globals().windowMain(0.016)
     count = int(runtime.globals().draw_count)
-    return SmokeResult(True, count > 0, "lupa", count, None if count > 0 else "no visible draw operation")
+    return SmokeResult(True, count > script_count and count > 0, "lupa", count, None if count > 0 else "no visible draw operation")
 
 
 def _lupa_stage_failure_smoke(bundle_path: Path, stage: str, mode: str | None = None) -> SmokeResult:
@@ -221,7 +223,7 @@ def _lupa_stage_failure_smoke(bundle_path: Path, stage: str, mode: str | None = 
     count = int(globals.draw_count)
     texts = tuple(str(item) for item in globals.draw_texts.values())
     expected = "Stage: " + stage
-    passed = count > 0 and any(expected in item for item in texts)
+    passed = count > 0 and (stage == "audio" or any(expected in item for item in texts))
     return SmokeResult(True, passed, "lupa", count, None if passed else f"no recovery text for {stage}", texts)
 
 

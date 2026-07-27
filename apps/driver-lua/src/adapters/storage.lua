@@ -14,6 +14,10 @@ local function defaults()
   }
 end
 
+function storage.defaults()
+  return defaults()
+end
+
 local function valid(value)
   if type(value) ~= "table" then
     return false
@@ -35,10 +39,11 @@ end
 
 function storage.load()
   local safe = defaults()
-  if type(ac) ~= "table" or type(ac.load) ~= "function" then
+  local ac_api = rawget(_G, "ac")
+  if type(ac_api) ~= "table" or type(ac_api.load) ~= "function" then
     return safe
   end
-  local ok, value = pcall(ac.load, storage_key)
+  local ok, value = pcall(ac_api.load, storage_key)
   if ok and valid(value) then
     return value
   end
@@ -46,10 +51,11 @@ function storage.load()
 end
 
 function storage.save(value)
-  if not valid(value) or type(ac) ~= "table" or type(ac.store) ~= "function" then
+  local ac_api = rawget(_G, "ac")
+  if not valid(value) or type(ac_api) ~= "table" or type(ac_api.store) ~= "function" then
     return false
   end
-  local ok = pcall(ac.store, storage_key, value)
+  local ok = pcall(ac_api.store, storage_key, value)
   return ok
 end
 

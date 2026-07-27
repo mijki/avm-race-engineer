@@ -33,14 +33,18 @@ source files. Each source module is wrapped in a deterministic lexical block,
 and `AVM_PitWall_F1.lua` is the single generated CSP entry output with source
 and package hashes recorded in `build-manifest.json`.
 
-The runtime namespace is `_G.AVM_PITWALL_F1`; CSP resolves
-`FUNCTION_MAIN = windowMain` through `script.windowMain(dt)`. The callback
-starts with a direct native CSP canary before state, storage, fixture, audio, or
-view-model work, then advances through narrow render stages. Direct `ui`,
+The runtime namespace is `_G.AVM_PITWALL_F1`. The first bundled module
+registers both global `windowMain(dt)` for `FUNCTION_MAIN = windowMain` and
+the compatibility `script.windowMain(dt)` wrapper. Both call one safe entry
+that draws direct native CSP text before dispatching to the application entry.
+The application then advances through narrow `namespace-ready`,
+`capabilities`, `storage`, `app-state`, `default-fixture`, `view-model`,
+`layout`, `selected-mode`, `alerts`, `footer`, and `audio` stages. Direct `ui`,
 `rgbm`, `vec2`, `ac`, audio, and storage access is confined to the runtime/native
 and adapter boundaries. The view model, formatter, alert state machine,
 scenario catalog, and layout calculator accept bounded inputs and do not
-perform networking or production race/weather calculations.
+perform networking or production race/weather calculations. Any stage failure
+uses a direct-native recovery panel and cannot turn the window invisible.
 
 The release package contains no source fixtures or development modules. The
 bundled asset manifest documents project ownership, licenses, dimensions,

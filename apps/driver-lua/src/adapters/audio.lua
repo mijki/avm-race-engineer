@@ -9,7 +9,8 @@ local sound_files = {
 }
 
 local function can_create_event()
-  return type(ac) == "table" and type(ac.AudioEvent) == "table" and type(ac.AudioEvent.fromFile) == "function"
+  local ac_api = rawget(_G, "ac")
+  return type(ac_api) == "table" and type(ac_api.AudioEvent) == "table" and type(ac_api.AudioEvent.fromFile) == "function"
 end
 
 function audio.play(kind, enabled, volume)
@@ -23,7 +24,8 @@ function audio.play(kind, enabled, volume)
   end
   local event = audio.events[kind]
   if event == nil then
-    local ok, created = pcall(ac.AudioEvent.fromFile, { filename = filename, use3D = false, loop = false })
+    local ac_api = rawget(_G, "ac")
+    local ok, created = pcall(ac_api.AudioEvent.fromFile, { filename = filename, use3D = false, loop = false })
     if not ok or created == nil then
       audio.last_error = tostring(created or "audio event creation failed")
       return false

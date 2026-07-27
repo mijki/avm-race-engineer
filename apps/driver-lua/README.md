@@ -27,14 +27,17 @@ surface and therefore carries the strictest safety constraints.
 - CSP calls, audio, and presentation storage are isolated behind
   `src/adapters/`; the first-frame native canary and recovery renderer use only
   documented direct CSP UI calls. Contracts, formatting, view-model reduction,
-  alert state, and layout selection remain host-testable.
+  alert state, and layout selection remain host-testable. The first bundle
+  module registers both `script.windowMain(dt)` and the manifest-requested
+  global `windowMain(dt)` before later modules initialize.
 - The shell has exactly three modes: Compact Race, Expanded Race, and
   Garage/Diagnostics. Race modes are fixed single-screen compositions with no
   scrolling child UI.
 - F1 consumes deterministic fixtures only. It has no networking, live
   telemetry, production weather or strategy calculation, setup application, or
   arbitrary numeric editing.
-- The host gate is complete. A real in-game CSP callback/render gate remains
+- The host gate covers the bundled-runtime correction, including callback timing
+  and forced stage hooks. A real in-game CSP callback/render gate remains
   explicitly pending and is not represented as passed by host tests.
 
 ## Build and validate

@@ -118,7 +118,25 @@ class F1DriverLuaTests(unittest.TestCase):
         self.assertEqual(forbidden_patterns(text), [])
         self.assertLessEqual(local_count(text), 20)
         self.assertIn("function script.windowMain(dt)", text)
-        self.assertNotIn("_G.windowMain", text)
+        self.assertIn("function windowMain(dt)", text)
+        self.assertIn('runtime.callback_registered = true', text)
+        self.assertLess(text.index("function script.windowMain(dt)"), text.index("BEGIN MODULE runtime_native"))
+
+    def test_callback_registration_precedes_risky_initialization(self) -> None:
+        bundle = (DIST / "AVM_PitWall_F1.lua").read_text(encoding="utf-8")
+        callback_script = bundle.index("function script.windowMain(dt)")
+        callback_global = bundle.index("function windowMain(dt)")
+        risky_module = bundle.index("BEGIN MODULE runtime_native")
+        app_state = bundle.index("namespace.app_state")
+        self.assertLess(callback_script, risky_module)
+        self.assertLess(callback_global, risky_module)
+        self.assertLess(callback_script, app_state)
+
+    def test_callback_shell_is_direct_and_precedes_application_entry(self) -> None:
+        bootstrap = (APP_ROOT / "src" / "bootstrap.lua").read_text(encoding="utf-8")
+        self.assertLess(bootstrap.index('function runtime.draw_entry_shell()'), bootstrap.index('local app_entry = runtime.app_entry'))
+        self.assertIn('pcall(api.text, bounded(value))', bootstrap)
+        self.assertIn('runtime.draw_recovery("runtime-entry", error_value)', bootstrap)
 
     def test_race_modes_are_single_screen_and_render_critical_copy(self) -> None:
         source = "\n".join(path.read_text(encoding="utf-8") for path in (APP_ROOT / "src").rglob("*.lua"))
@@ -197,13 +215,23 @@ class F1DriverLuaTests(unittest.TestCase):
     def test_runtime_staging_and_first_draw_contract(self) -> None:
         source = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
         self.assertLess(source.index("native.draw_canary()"), source.index("namespace.app_state.ensure"))
-        for stage in ("runtime-capability-check", "application-state", "mock-snapshot", "view-model", "selected-mode", "base-shell", "alert-overlay", "connection-footer", "audio-side-effects"):
+        for stage in ("namespace-ready", "capabilities", "storage", "app-state", "default-fixture", "view-model", "layout", "selected-mode", "alerts", "footer", "audio"):
             self.assertIn(stage, source)
         self.assertIn("test_fail_stage", source)
-        self.assertIn("function script.windowMain(dt)", source)
+        self.assertIn("runtime.app_entry = app.windowMain", source)
+
+    def test_runtime_logging_stages_are_bounded_and_once_only(self) -> None:
+        bootstrap = (APP_ROOT / "src" / "bootstrap.lua").read_text(encoding="utf-8")
+        app = (APP_ROOT / "src" / "app.lua").read_text(encoding="utf-8")
+        for message in ("bundle top-level start", "callback registration complete", "first windowMain entry", "early native shell drawn"):
+            self.assertIn(message, bootstrap)
+        for message in ("namespace ready", "app state ready", "view model ready", "selected mode rendered"):
+            self.assertIn(message, app)
+        self.assertIn("recovery stage=", bootstrap)
+        self.assertIn("runtime.log_once", app)
 
     def test_forced_stage_failures_keep_recovery_visible(self) -> None:
-        cases = [("application-state", None), ("view-model", None), ("mode-render-compact", "compact"), ("mode-render-expanded", "expanded"), ("mode-render-garage", "garage")]
+        cases = [(stage, None) for stage in ("namespace-ready", "capabilities", "storage", "app-state", "default-fixture", "view-model", "layout", "selected-mode", "alerts", "footer", "audio")]
         for stage, mode in cases:
             result = stage_failure_smoke(DIST / "AVM_PitWall_F1.lua", stage, mode)
             if not result.available:
@@ -219,7 +247,7 @@ class F1DriverLuaTests(unittest.TestCase):
         self.assertNotIn("Relay Server", bundle)
 
     def test_callback_smoke_is_explicit_about_runtime_backend(self) -> None:
-        result = callback_smoke(DIST / "AVM_PitWall.lua")
+        result = callback_smoke(DIST / "AVM_PitWall_F1.lua")
         if not result.available:
             self.skipTest(result.error or "Lua runtime unavailable")
         self.assertTrue(result.passed, result.error)

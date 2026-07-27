@@ -141,10 +141,7 @@ function csp.separator(color)
 end
 
 function csp.log(message)
-  local ac_api = rawget(_G, "ac")
-  if type(ac_api) == "table" and type(ac_api.console) == "function" then
-    pcall(ac_api.console, "AVM PitWall F1: " .. tostring(message), false)
-  end
+  namespace.runtime.log(message)
 end
 
 namespace.adapters = namespace.adapters or {}

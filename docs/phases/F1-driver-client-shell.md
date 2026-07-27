@@ -86,13 +86,25 @@ not provide a Lua parser, Lupa, or an interactive Assetto Corsa/CSP session, so
 callback execution, visible in-game render smoke, and mode/audio interaction
 remain pending. This is deliberately not counted as CSP validation passed.
 
-The F1 CSP correction uses the unique `AVM PitWall F1 Dev` registration with
-`[WINDOW_...]`, the folder-matching `AVM_PitWall_F1.lua` entry, and the
-canonical `script.windowMain(dt)` callback. The callback draws a direct native
-canary first and retains it with bounded direct-native recovery panels when a
-later stage fails. The original manual manifest test proved app discovery and
-window creation, but its blank client region means the real runtime gate still
-requires an interactive retest.
+The reviewed minimal real-CSP probe proved app discovery, corrected manifest
+shape, window creation, `FUNCTION_MAIN = windowMain` resolution, callback
+execution, and direct native drawing. It did not prove the full bundle: the
+generated bundle's original callback was registered only by the final `app`
+module as `script.windowMain(dt)`, while the manifest requested global
+`windowMain`, so the full app opened with a blank client region.
+
+The correction registers both callback shapes in `bootstrap.lua`, before any
+later module can fail. The shared callback draws `AVM PitWall`, `F1 runtime
+active`, and an initialization line with direct `ui.text()` calls before
+dispatching to the application entry. Full initialization then runs through
+the stable `namespace-ready`, `capabilities`, `storage`, `app-state`,
+`default-fixture`, `view-model`, `layout`, `selected-mode`, `alerts`, `footer`,
+and `audio` stages. Each stage is bounded; failures retain a direct-native
+recovery panel and produce one bounded log entry. Missing storage, assets, and
+audio remain degraded inputs rather than callback blockers.
+
+The real-CSP full-bundle retest remains required. This phase is not marked
+runtime-validated until the corrected package renders all three modes in CSP.
 
 ## Security
 

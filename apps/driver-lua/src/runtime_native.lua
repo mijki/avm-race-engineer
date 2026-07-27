@@ -78,10 +78,7 @@ function native.text_at(value, x, y, text_color)
 end
 
 function native.log(message)
-  local ac_api = rawget(_G, "ac")
-  if type(ac_api) == "table" and type(ac_api.console) == "function" then
-    pcall(ac_api.console, "AVM PitWall F1: " .. safe_text(message), false)
-  end
+  namespace.runtime.log(message)
 end
 
 function native.draw_canary()

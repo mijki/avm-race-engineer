@@ -8,10 +8,10 @@ local garage = namespace.ui.garage
 local fallback = namespace.ui.fallback
 local theme = namespace.ui.theme
 local app = {}
-local lifecycle = namespace.runtime.lifecycle or {}
+local runtime = namespace.runtime
+local lifecycle = runtime.lifecycle or {}
 
 namespace.runtime.lifecycle = lifecycle
-namespace.runtime.callback_export = "script.windowMain"
 
 local function bounded(value)
   local text = tostring(value or "unknown")
@@ -23,34 +23,29 @@ local function bounded(value)
 end
 
 local function log_once(key, message)
-  if lifecycle[key] then
-    return
-  end
-  lifecycle[key] = true
-  csp.log(message)
+  runtime.log_once(key, message)
 end
 
 local function recover(stage, detail)
   lifecycle.recovery_stage = stage
   lifecycle.recovery_detail = bounded(detail)
-  local ok = pcall(fallback.render, stage, lifecycle.recovery_detail)
+  local ok = pcall(runtime.draw_recovery, stage, lifecycle.recovery_detail)
   if not ok then
-    native.emergency("Render recovery")
+    pcall(fallback.render, stage, lifecycle.recovery_detail)
   end
-  log_once("recovery_logged_" .. tostring(stage), "recovery stage=" .. tostring(stage) .. " detail=" .. lifecycle.recovery_detail)
 end
 
 local function run_stage(name, callback)
   lifecycle.stage = name
   if namespace.runtime.test_fail_stage == name then
     local detail = "forced failure for host validation"
-    csp.log("stage=" .. name .. " detail=" .. detail)
+    runtime.log_once("stage_failure_" .. name, "stage=" .. name .. " detail=" .. detail)
     return false, detail
   end
   local ok, result = pcall(callback)
   if not ok then
     local detail = bounded(result)
-    csp.log("stage=" .. name .. " detail=" .. detail)
+    runtime.log_once("stage_failure_" .. name, "stage=" .. name .. " detail=" .. detail)
     return false, detail
   end
   return true, result
@@ -100,46 +95,66 @@ local function draw_footer(vm, boxes)
 end
 
 function app.windowMain(dt)
-  log_once("bundle_logged", "bundle version=" .. namespace.version .. " entry=AVM_PitWall_F1.lua callback=script.windowMain")
+  log_once("bundle_logged", "bundle version=" .. namespace.version .. " entry=AVM_PitWall_F1.lua")
   log_once("initialization_logged", "F1 initialization started")
   lifecycle.callback_count = (lifecycle.callback_count or 0) + 1
 
   local canary_drawn = native.draw_canary()
   if canary_drawn then
-    log_once("first_callback_logged", "first callback entered")
-    log_once("first_shell_logged", "first visible shell rendered")
+    log_once("app_shell_logged", "application native shell rendered")
   else
     native.emergency("F1 runtime active")
   end
 
-  local capability_ok, capability_error = run_stage("runtime-capability-check", function()
+  local namespace_ok, namespace_error = run_stage("namespace-ready", function()
+    assert(type(namespace.adapters) == "table", "adapter namespace unavailable")
+    assert(type(namespace.ui) == "table", "UI namespace unavailable")
+    assert(type(namespace.app_state) == "table", "application state unavailable")
+  end)
+  if not namespace_ok then
+    recover("namespace-ready", namespace_error)
+    return
+  end
+  log_once("namespace_ready_logged", "namespace ready")
+
+  local capability_ok, capability_error = run_stage("capabilities", function()
     local capabilities = csp.capabilities()
     assert(capabilities.required, "required CSP drawing API unavailable")
     assert(capabilities.backend == "csp-native", "unexpected runtime adapter")
     return capabilities
   end)
   if not capability_ok then
-    recover("runtime-capability-check", capability_error)
+    recover("capabilities", capability_error)
+    return
+  end
+
+  local settings
+  local storage_ok, storage_error = run_stage("storage", function()
+    settings = assert(namespace.adapters.storage.load(), "presentation storage unavailable")
+  end)
+  if not storage_ok then
+    recover("storage", storage_error)
     return
   end
 
   local state
-  local state_ok, state_error = run_stage("application-state", function()
-    state = assert(namespace.app_state.ensure(), "application state unavailable")
+  local state_ok, state_error = run_stage("app-state", function()
+    state = assert(namespace.app_state.ensure(settings), "application state unavailable")
     assert(state.mode == "compact" or state.mode == "expanded" or state.mode == "garage", "invalid default mode")
   end)
   if not state_ok then
-    recover("application-state", state_error)
+    recover("app-state", state_error)
     return
   end
+  log_once("app_state_ready_logged", "app state ready")
   log_once("scenario_logged", "default scenario selected=" .. tostring(state.scenario_id))
   log_once("mode_logged", "default mode selected=" .. tostring(state.mode))
 
-  local snapshot_ok, snapshot_error = run_stage("mock-snapshot", function()
+  local snapshot_ok, snapshot_error = run_stage("default-fixture", function()
     assert(type(state.envelope) == "table", "deterministic fixture unavailable")
   end)
   if not snapshot_ok then
-    recover("mock-snapshot", snapshot_error)
+    recover("default-fixture", snapshot_error)
     return
   end
 
@@ -152,9 +167,10 @@ function app.windowMain(dt)
     recover("view-model", view_model_error)
     return
   end
+  log_once("view_model_ready_logged", "view model ready")
 
   local width, height, boxes
-  local selection_ok, selection_error = run_stage("selected-mode", function()
+  local layout_ok, layout_error = run_stage("layout", function()
     width, height = csp.window_size()
     boxes = layout.for_mode(width, height, state.mode, vm.alert.priority == "critical")
     assert(layout.intersects(boxes.header, width, height), "header layout is not visible")
@@ -163,56 +179,50 @@ function app.windowMain(dt)
       assert(layout.intersects(required_box, width, height), name .. " layout is not visible")
     end
   end)
-  if not selection_ok then
-    recover("selected-mode", selection_error)
+  if not layout_ok then
+    recover("layout", layout_error)
     return
   end
+  log_once("layout_ready_logged", "layout ready")
 
-  local shell_ok, shell_error = run_stage("base-shell", function()
+  local selected_mode_ok, selected_mode_error = run_stage("selected-mode", function()
     csp.rect(0, 0, width, height, theme.color("background"), 0)
     draw_header(vm, boxes)
-  end)
-  if not shell_ok then
-    recover("base-shell", shell_error)
-    return
-  end
-
-  local mode_name = state.mode
-  local mode_ok, mode_error = run_stage("mode-render-" .. mode_name, function()
-    if mode_name == "expanded" then
+    if state.mode == "expanded" then
       expanded.render(vm, boxes)
-    elseif mode_name == "garage" then
+    elseif state.mode == "garage" then
       garage.render(vm, boxes, state)
     else
       compact.render(vm, boxes)
     end
   end)
-  if not mode_ok then
-    recover("mode-render-" .. mode_name, mode_error)
+  if not selected_mode_ok then
+    recover("selected-mode", selected_mode_error)
     return
   end
+  log_once("selected_mode_logged", "selected mode rendered")
 
-  local alert_ok, alert_error = run_stage("alert-overlay", function()
+  local alert_ok, alert_error = run_stage("alerts", function()
     draw_banner(vm, boxes, state)
   end)
   if not alert_ok then
-    recover("alert-overlay", alert_error)
+    recover("alerts", alert_error)
     return
   end
 
-  local footer_ok, footer_error = run_stage("connection-footer", function()
+  local footer_ok, footer_error = run_stage("footer", function()
     draw_footer(vm, boxes)
   end)
   if not footer_ok then
-    recover("connection-footer", footer_error)
+    recover("footer", footer_error)
     return
   end
 
-  local audio_ok, audio_error = run_stage("audio-side-effects", function()
+  local audio_ok, audio_error = run_stage("audio", function()
     namespace.app_state.update(dt)
   end)
   if not audio_ok then
-    csp.log("audio-side-effects degraded detail=" .. bounded(audio_error))
+    runtime.log_once("audio_degraded_logged", "audio degraded detail=" .. bounded(audio_error))
   end
   log_once("full_mode_logged", "full mode rendered")
 end
@@ -226,9 +236,5 @@ function app.reset_for_test()
 end
 
 namespace.app = app
-if type(rawget(_G, "script")) ~= "table" then
-  rawset(_G, "script", {})
-end
-function script.windowMain(dt)
-  return namespace.app.windowMain(dt)
-end
+runtime.app_entry = app.windowMain
+runtime.log_once("app_entry_registered_logged", "application entry registered")
