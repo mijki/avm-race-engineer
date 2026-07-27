@@ -161,3 +161,30 @@ The visual banner remains authoritative when audio is unavailable or muted.
 F1 does not implement transport incident grouping, TTS, live command delivery,
 or production alert authority. Those remain later-phase responsibilities and
 must not be inferred from the mock scenario behavior.
+
+## Current local live-driver refinement
+
+The local F1 calculation slice separates source trust from Engineer
+instructions. `TEL`, `BRG`, and `ENG` are the source-health indicators; the
+full-width Compact Engineer strip is reserved for a structured message. The
+current intentional states are `BRG NOT USED` and `ENG NOT ASSIGNED`, not red
+disconnect states, because no real heartbeat or assigned engineer source is
+configured.
+
+Local messages carry an ID, source, severity, title, detail, creation time,
+expiry, priority, acknowledgement requirement/state, and related reason.
+They may come from the bounded local calculation model or Garage test
+injection. Recalculation preserves acknowledgement for the same message ID;
+non-acknowledgement messages expire, while acknowledgement-required messages
+remain visible until acknowledged or superseded.
+
+Compact priority is: urgent Engineer action, pit instruction, supported
+race-control/vehicle-health warning, fuel feasibility, pace target, tyre state,
+weather/track change, then source-health degradation. Unsupported race-control
+or vehicle-health fields are not invented. Endurance rules are only surfaced
+when explicitly configured and actionable.
+
+Semantic colors are cell/message-level: neutral for absent targets, cyan for
+measured information, green for within an explicit threshold, amber for
+caution/low confidence, red for critical deviation or action, and muted grey
+for unavailable or unsupported values. Text and shape always accompany color.

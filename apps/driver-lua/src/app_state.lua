@@ -20,7 +20,20 @@ local state = {
   view_models = {},
   alerts = nil,
   scenario_history = {},
+  runtime_config = nil,
 }
+
+local function effective_config(settings)
+  local result = {}
+  for key, value in pairs(config) do result[key] = value end
+  result.targets = {}
+  for key, value in pairs(config.targets or {}) do result.targets[key] = value end
+  local saved = settings and settings.targets
+  if type(saved) == "table" then
+    for key, value in pairs(saved) do result.targets[key] = value end
+  end
+  return result
+end
 
 local function known_legacy_scenario(id)
   local ids = legacy_mock.list()
@@ -52,6 +65,7 @@ function state.initialize(settings_override)
   if state.initialized then return state end
   state.settings = settings_override or storage.load()
   if type(state.settings) ~= "table" then state.settings = storage.defaults() end
+  state.runtime_config = effective_config(state.settings)
   state.mode = state.settings.mode or config.default_mode
   if state.mode ~= "compact" and state.mode ~= "expanded" and state.mode ~= "garage" then
     state.mode = config.default_mode
@@ -76,7 +90,7 @@ function state.update(dt)
   state.initialize()
   local delta = type(dt) == "number" and math.max(0, math.min(dt, 0.25)) or 0.016
   state.clock = state.clock + delta
-  local status = telemetry.update(state.live, state.clock, config)
+  local status = telemetry.update(state.live, state.clock, state.runtime_config or config)
   if state.live.latest and state.live.calibration == nil then
     state.live.calibration = storage.load_calibration(state.live.identity)
     telemetry.set_calibration(state.live, state.live.calibration)
@@ -116,6 +130,123 @@ function state.set_source_mode(self, value)
   return true
 end
 
+function state.set_target(self, name, value)
+  if self.mode ~= "garage" or type(name) ~= "string" then return false end
+  local limits = {
+    pace_s = { minimum = 1, maximum = 1000 },
+    fuel_per_lap_l = { minimum = 0.01, maximum = 100 },
+    stint_minutes = { minimum = 1, maximum = 1440 },
+    planned_pit_lap = { minimum = 1, maximum = 10000 },
+  }
+  local limit = limits[name]
+  if limit == nil or (value ~= nil and (type(value) ~= "number" or value < limit.minimum or value > limit.maximum)) then return false end
+  self.runtime_config = self.runtime_config or effective_config(self.settings)
+  self.runtime_config.targets[name] = value
+  self.settings.targets = self.settings.targets or {}
+  self.settings.targets[name] = value
+  self.save_settings()
+  self.latest_status = nil
+  self.view_models = {}
+  return true
+end
+
+function state.set_pressure_unit(self, unit)
+  if self.mode ~= "garage" or (unit ~= "psi" and unit ~= "kPa") then return false end
+  self.runtime_config = self.runtime_config or effective_config(self.settings)
+  self.runtime_config.targets.pressure_unit = unit
+  self.settings.targets = self.settings.targets or {}
+  self.settings.targets.pressure_unit = unit
+  self.save_settings()
+  return true
+end
+
+function state.set_pressure_target(self, compound, wheel, value)
+  if self.mode ~= "garage" or type(compound) ~= "string" or type(wheel) ~= "string" then return false end
+  if value ~= nil and (type(value) ~= "number" or value < 1 or value > 100) then return false end
+  self.runtime_config = self.runtime_config or effective_config(self.settings)
+  local targets = self.runtime_config.targets.pressure_targets_psi
+  if type(targets) ~= "table" then targets = {}; self.runtime_config.targets.pressure_targets_psi = targets end
+  targets[compound] = targets[compound] or {}
+  if type(targets[compound]) ~= "table" then targets[compound] = {} end
+  targets[compound][wheel] = value
+  self.settings.targets = self.settings.targets or {}
+  self.settings.targets.pressure_targets_psi = targets
+  self.save_settings()
+  self.latest_status = nil
+  self.view_models = {}
+  return true
+end
+
+function state.set_temperature_target(self, compound, wheel, value)
+  if self.mode ~= "garage" or type(compound) ~= "string" or type(wheel) ~= "string" then return false end
+  if value ~= nil and (type(value) ~= "number" or value < -50 or value > 250) then return false end
+  self.runtime_config = self.runtime_config or effective_config(self.settings)
+  local targets = self.runtime_config.targets.temperature_targets_c
+  if type(targets) ~= "table" then targets = {}; self.runtime_config.targets.temperature_targets_c = targets end
+  targets[compound] = targets[compound] or {}
+  if type(targets[compound]) ~= "table" then targets[compound] = {} end
+  targets[compound][wheel] = value
+  self.settings.targets = self.settings.targets or {}
+  self.settings.targets.temperature_targets_c = targets
+  self.save_settings()
+  self.latest_status = nil
+  self.view_models = {}
+  return true
+end
+
+function state.set_comparison_threshold(self, name, value)
+  if self.mode ~= "garage" or type(name) ~= "string" or type(value) ~= "number" then return false end
+  local limits = {
+    pace_delta_threshold_s = { minimum = 0.01, maximum = 10 },
+    fuel_comparison_threshold_l = { minimum = 0.01, maximum = 10 },
+    pressure_delta_threshold_psi = { minimum = 0.01, maximum = 20 },
+    temperature_delta_threshold_c = { minimum = 0.1, maximum = 100 },
+  }
+  local limit = limits[name]
+  if limit == nil or value < limit.minimum or value > limit.maximum then return false end
+  self.runtime_config = self.runtime_config or effective_config(self.settings)
+  self.runtime_config.targets[name] = value
+  self.settings.targets = self.settings.targets or {}
+  self.settings.targets[name] = value
+  self.save_settings()
+  self.latest_status = nil
+  self.view_models = {}
+  return true
+end
+
+function state.set_strategy_profile(self, profile)
+  if self.mode ~= "garage" or (profile ~= nil and (type(profile) ~= "string" or #profile > 64)) then return false end
+  self.runtime_config = self.runtime_config or effective_config(self.settings)
+  self.runtime_config.targets.strategy_profile = profile
+  self.settings.targets = self.settings.targets or {}
+  self.settings.targets.strategy_profile = profile
+  self.save_settings()
+  return true
+end
+
+function state.set_endurance_rule(self, name, value)
+  if self.mode ~= "garage" or type(name) ~= "string" then return false end
+  local numeric_rules = {
+    maximum_driver_stint_minutes = true,
+    max_continuous_driving_minutes = true,
+    minimum_rest_minutes = true,
+    minimum_fuel_l = true,
+    maximum_fuel_l = true,
+    required_pit_stops = true,
+  }
+  local boolean_rules = { mandatory_driver_change = true, mandatory_tyre_rules = true }
+  if numeric_rules[name] and (type(value) ~= "number" or value < 0) then return false end
+  if boolean_rules[name] and type(value) ~= "boolean" then return false end
+  if not numeric_rules[name] and not boolean_rules[name] then return false end
+  self.runtime_config = self.runtime_config or effective_config(self.settings)
+  if type(self.runtime_config.targets.endurance_rules) ~= "table" then self.runtime_config.targets.endurance_rules = {} end
+  self.runtime_config.targets.endurance_rules[name] = value
+  self.settings.targets = self.settings.targets or {}
+  self.settings.targets.endurance_rules = self.runtime_config.targets.endurance_rules
+  self.save_settings()
+  return true
+end
+
 function state.set_mock_scenario(self, name)
   if self.mode ~= "garage" then return false end
   local fixture = live_mock.get(name)
@@ -142,11 +273,13 @@ end
 
 function state.capture_calibration(self)
   local snapshot = self.live and self.live.latest
+  if self.mode ~= "garage" or self.live == nil or type(self.live.calibration_capture_armed_until) ~= "number" or self.clock > self.live.calibration_capture_armed_until then return false end
   if snapshot == nil or snapshot.car == nil or (snapshot.car.speed_kmh or math.huge) > config.calibration_speed_limit_kmh then return false end
   local length = snapshot.session and snapshot.session.track_length_m
   local spline = snapshot.car.spline
   if type(length) ~= "number" or length <= 0 or type(spline) ~= "number" or spline < 0 or spline >= 1 then return false end
   local identity = self.live.identity
+  if type(identity) ~= "table" or identity.track_id == nil or identity.layout_id == nil then return false end
   self.live.calibration = {
     track_id = identity.track_id,
     layout_id = identity.layout_id,
@@ -158,12 +291,53 @@ function state.capture_calibration(self)
     validation_status = "valid",
   }
   storage.save_calibration(identity, self.live.calibration)
+  self.live.calibration_capture_armed_until = nil
+  return true
+end
+
+function state.arm_calibration(self)
+  local snapshot = self.live and self.live.latest
+  if self.mode ~= "garage" or snapshot == nil or snapshot.car == nil or (snapshot.car.speed_kmh or math.huge) > config.calibration_speed_limit_kmh then return false end
+  self.live.calibration_capture_armed_until = self.clock + config.calibration_arm_timeout_s
   return true
 end
 
 function state.reset_calibration(self)
   if self.live and self.live.identity then storage.reset_calibration(self.live.identity) end
   if self.live then self.live.calibration = nil end
+  return true
+end
+
+state.clear_calibration = state.reset_calibration
+
+function state.validate_calibration(self)
+  local snapshot = self.live and self.live.latest
+  return namespace.live.track_model.validate(self.live and self.live.calibration, snapshot and snapshot.identity)
+end
+
+function state.test_pit_distance(self)
+  local snapshot = self.live and self.live.latest
+  if snapshot == nil then return nil, "SOURCE_UNAVAILABLE" end
+  return namespace.live.track_model.distance_to_pit(snapshot, self.live.calibration)
+end
+
+function state.inject_engineer_message(self, title, detail, priority, requires_acknowledgement)
+  if self.mode ~= "garage" or self.live == nil then return false end
+  local message_id = "garage:" .. tostring(self.clock)
+  self.live.injected_engineer_message = {
+    message_id = message_id,
+    source = "GARAGE_TEST",
+    severity = (priority or 8) <= 2 and "critical" or "info",
+    title = tostring(title or "ENGINEER TEST"),
+    detail = tostring(detail or "Garage-injected message"),
+    created_s = self.clock,
+    expiry_s = nil,
+    priority = priority or 8,
+    requires_acknowledgement = requires_acknowledgement == true,
+    acknowledged = false,
+  }
+  self.latest_status = nil
+  self.view_models = {}
   return true
 end
 
@@ -181,6 +355,10 @@ function state.save_settings()
 end
 
 function state.acknowledge()
+  if state.live and state.live.engineer_active and state.live.engineer_active.requires_acknowledgement then
+    state.live.engineer_active.acknowledged = true
+    return true
+  end
   local active = namespace.alert_state.active(state.alerts)
   if active == nil then return false end
   local changed = namespace.alert_state.acknowledge(state.alerts, active.alert_id, state.clock)
@@ -210,6 +388,7 @@ function state.reset_for_test()
   state.settings = {}
   state.source_mode = config.default_source_mode
   state.mode = config.default_mode
+  state.runtime_config = nil
 end
 
 namespace.app_state = state

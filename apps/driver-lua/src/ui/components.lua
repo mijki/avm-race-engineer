@@ -38,6 +38,38 @@ function components.badge(text, x, y, width, tone)
   csp.text_aligned(text, x + 5, y + 3, width - 10, color, 16)
 end
 
+function components.indicator(indicator, x, y, width)
+  indicator = indicator or {}
+  local color = theme.tone(indicator.tone or "neutral")
+  local shape = indicator.shape or "hollow"
+  local center_x = x + 7
+  local center_y = y + 9
+  if shape == "filled" or shape == "warning" then
+    csp.circle(center_x, center_y, 4, color, true)
+  else
+    csp.circle(center_x, center_y, 4, color, false)
+    if shape == "crossed" then
+      csp.line(center_x - 4, center_y - 4, center_x + 4, center_y + 4, color, 1.5)
+    end
+  end
+  components.safe_text(indicator.label or "--", x + 15, y + 2, math.max(20, (width or 54) - 15), color)
+end
+
+function components.header(vm, box)
+  if type(box) ~= "table" then return end
+  local header = vm and vm.header or {}
+  components.card(box, "AVM PitWall", nil, header.source_tone)
+  local indicator_width = 50
+  local indicator_gap = 3
+  local indicator_x = box.x + box.width - indicator_width * 3 - indicator_gap * 2 - 8
+  local context_width = math.max(40, indicator_x - box.x - 108)
+  components.safe_text(header.context ~= "" and header.context or ((header.session or "") .. "  " .. (header.lap or "")), box.x + 108, box.y + 9, context_width, theme.color("muted"))
+  local indicators = header.indicators or {}
+  components.indicator(indicators.telemetry, indicator_x, box.y + 5, indicator_width)
+  components.indicator(indicators.bridge, indicator_x + indicator_width + indicator_gap, box.y + 5, indicator_width)
+  components.indicator(indicators.engineer, indicator_x + (indicator_width + indicator_gap) * 2, box.y + 5, indicator_width)
+end
+
 function components.metric(label, value, x, y, width, tone)
   components.label(label, x, y, theme.color("muted"))
   components.value(value, x, y + 15, theme.tone(tone or "info"))
@@ -91,8 +123,17 @@ function components.safe_text(text, x, y, width, color)
   if type(width) == "number" and width > 0 then
     local max_chars = math.max(1, math.floor(width / 7))
     if #safe > max_chars then
-      local keep = math.max(1, max_chars - 3)
-      safe = string.sub(safe, 1, keep) .. "..."
+      local short = {
+        ["Waiting for representative lap"] = "WARMING",
+        ["No reliable future forecast"] = "NO FORECAST",
+        ["No active instruction"] = "NO ACTION",
+        ["Not configured"] = "NOT SET",
+        ["Pit entry not calibrated"] = "NOT CALIBRATED",
+        ["High confidence"] = "HIGH",
+        ["Medium confidence"] = "MEDIUM",
+        ["Low confidence"] = "LOW",
+      }
+      safe = short[safe] or string.sub(safe, 1, max_chars)
     end
   end
   csp.text_aligned(safe, x, y, width, color or theme.color("text"))

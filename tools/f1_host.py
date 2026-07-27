@@ -48,29 +48,30 @@ def required_layout_boxes(width: int, height: int, mode: str = "compact", critic
     """Mirror the F1 layout's bounded geometry for host visibility checks."""
     margin = 8.0
     gap = 6.0
-    outer_height = max(150.0, height - 12.0)
-    header_height = 32.0 if mode == "garage" else max(26.0, min(32.0, height * 0.08))
+    outer_height = max(1.0, height - 12.0)
+    header_height = 32.0 if mode == "garage" else max(28.0, min(34.0, height * 0.09))
     outer_width = width - margin * 2
     header = (margin, 6.0, outer_width, header_height)
+    content = (0.0, 0.0, float(width), float(height))
     if mode == "compact":
-        footer_height = max(30.0, min(38.0, height * 0.085))
+        footer_height = max(42.0, min(54.0, height * 0.13))
         body_y = 6.0 + header_height + gap
         footer_y = 6.0 + outer_height - footer_height
-        body_height = max(52.0, footer_y - gap - body_y)
-        primary_height = max(72.0, min((body_height - gap) * 0.58, body_height - gap - 52.0))
-        secondary_height = body_height - primary_height - gap
-        if secondary_height < 52.0:
-            secondary_height = 52.0
-            primary_height = max(42.0, body_height - secondary_height - gap)
-        primary_width = (outer_width - gap * 2) / 3
+        body_height = max(1.0, footer_y - gap - body_y)
+        large = width >= 850
+        primary_height = max(76.0, min(128.0, body_height * 0.50)) if large else max(62.0, min(112.0, body_height * 0.32))
+        pit_height = primary_height if large else max(50.0, min(78.0, body_height * 0.23))
+        secondary_height = body_height - primary_height - (gap if large else gap * 2) - (0 if large else pit_height)
+        primary_width = (outer_width - gap * 2) / 3 if large else (outer_width - gap) / 2
         secondary_width = (outer_width - gap) / 2
-        secondary_y = body_y + primary_height + gap
+        secondary_y = body_y + primary_height + gap if large else body_y + primary_height + gap + pit_height + gap
         return {
+            "content": content,
             "header": header,
             "stint_timing": header,
             "fuel": (margin, body_y, primary_width, primary_height),
             "pace": (margin + primary_width + gap, body_y, primary_width, primary_height),
-            "pit": (margin + (primary_width + gap) * 2, body_y, primary_width, primary_height),
+            "pit": (margin + (primary_width + gap) * 2, body_y, primary_width, primary_height) if large else (margin, body_y + primary_height + gap, outer_width, pit_height),
             "tyres": (margin, secondary_y, secondary_width, secondary_height),
             "weather": (margin + secondary_width + gap, secondary_y, secondary_width, secondary_height),
             "engineer_message": (margin, footer_y, outer_width, footer_height),
@@ -78,13 +79,14 @@ def required_layout_boxes(width: int, height: int, mode: str = "compact", critic
         }
     if mode == "expanded":
         body_y = 6.0 + header_height + gap
-        body_height = max(110.0, 6.0 + outer_height - body_y)
+        body_height = max(1.0, 6.0 + outer_height - body_y)
         left_width = outer_width * 0.43
         right_x = margin + left_width + gap
         right_width = outer_width - left_width - gap
         row_height = max(24.0, (body_height - gap * 4) / 5)
         left_card_height = max(24.0, (body_height - gap * 2) / 3)
         return {
+            "content": content,
             "header": header,
             "stint_timing": (right_x, body_y, right_width, row_height),
             "fuel": (margin, body_y, left_width, left_card_height),
@@ -97,13 +99,14 @@ def required_layout_boxes(width: int, height: int, mode: str = "compact", critic
             "fallback_shell": (10.0, 10.0, max(160.0, width - 20.0), max(120.0, height - 20.0)),
         }
     body_y = 6.0 + header_height + gap
-    overview_height = 54.0
+    overview_height = 50.0
     controls_y = body_y + overview_height + gap
-    controls_height = max(86.0, min(108.0, outer_height * 0.28))
+    controls_height = min(160.0, max(86.0, 6.0 + outer_height - controls_y - gap - 1.0))
     diagnostics_y = controls_y + controls_height + gap
-    diagnostics_height = max(52.0, 6.0 + outer_height - diagnostics_y)
+    diagnostics_height = max(1.0, 6.0 + outer_height - diagnostics_y)
     overview = (margin, body_y, outer_width, overview_height)
     return {
+        "content": content,
         "header": header,
         "stint_timing": overview,
         "fuel": overview,

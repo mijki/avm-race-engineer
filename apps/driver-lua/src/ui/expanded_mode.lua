@@ -12,6 +12,7 @@ local function line(box, label, value, y, tone)
 end
 
 function expanded.render(vm, boxes)
+  components.header(vm, boxes.header)
   local timing = boxes.cards.timing
   components.card(timing, "STINT TIMING", "elapsed", "info")
   local column = timing.width / 3
@@ -32,6 +33,12 @@ function expanded.render(vm, boxes)
   line(fuel, "CURRENT", vm.fuel.current, fuel.y + 66, "info")
   line(fuel, "AT PIT ENTRY", vm.fuel.expected_at_pit, fuel.y + 101, "info")
   if fuel.height >= 190 then
+    line(fuel, "TARGET / AVG", vm.fuel.target .. " / " .. vm.fuel.average, fuel.y + 136, "text")
+    line(fuel, "LATEST VALID VS TARGET", vm.fuel.vs_target, fuel.y + 171, "info")
+    if fuel.height >= 225 then
+      line(fuel, "VALID VS AVG", vm.fuel.vs_average, fuel.y + 206, "info")
+      line(fuel, "AVG VS TARGET", vm.fuel.average_vs_target, fuel.y + 241, "info")
+    end
     components.label("DISTANCE TO PIT ENTRY", fuel.x + 10, fuel.y + fuel.height - 39, theme.color("muted"))
     components.safe_text(vm.fuel.distance_to_pit, fuel.x + 10, fuel.y + fuel.height - 24, fuel.width * 0.44, theme.color("text"))
     components.safe_text("PIT ROUTE  " .. vm.fuel.pit_route, fuel.x + fuel.width * 0.52, fuel.y + fuel.height - 24, fuel.width * 0.44, theme.color("text"))
@@ -43,6 +50,12 @@ function expanded.render(vm, boxes)
   line(pace, "STATUS", vm.pace.status, pace.y + 66, vm.pace.status == "SAVE" and "warning" or "good")
   line(pace, "LAST REPRESENTATIVE LAP", vm.pace.last_lap, pace.y + 101, "text")
   if pace.height >= 190 then
+    line(pace, "TARGET / AVG", vm.pace.target .. " / " .. vm.pace.average, pace.y + 136, "text")
+    line(pace, "VALID VS AVG", vm.pace.vs_average, pace.y + 171, "info")
+    if pace.height >= 225 then
+      line(pace, "AVG VS TARGET", vm.pace.average_vs_target, pace.y + 206, "info")
+      line(pace, "LATEST COMPLETED", vm.pace.latest_completed, pace.y + 241, "info")
+    end
     components.label("ROLLING TREND  " .. string.upper(vm.pace.trend), pace.x + 10, pace.y + pace.height - 24, theme.color("muted"))
     local trend = vm.pace.trend_values
     if csp.has("drawLine") then
@@ -62,7 +75,13 @@ function expanded.render(vm, boxes)
   line(tyres, "WEAR", vm.tyres.wear, tyres.y + 66, "info")
   line(tyres, "CONDITION", vm.tyres.condition, tyres.y + 101, "good")
   if tyres.height >= 155 then
-    components.safe_text(vm.tyres.temperature, tyres.x + 10, tyres.y + tyres.height - 24, tyres.width - 20, theme.color("muted"))
+    local wheel_text = {}
+    for index = 1, 4 do
+      local wheel = vm.tyres.wheels and vm.tyres.wheels[index]
+      wheel_text[#wheel_text + 1] = wheel and (wheel.label .. " " .. wheel.temperature .. " " .. wheel.pressure_delta .. " " .. wheel.life) or "--"
+    end
+    components.safe_text(table.concat(wheel_text, "  |  "), tyres.x + 10, tyres.y + tyres.height - 42, tyres.width - 20, theme.color("muted"))
+    components.safe_text(vm.tyres.temperature_source or vm.tyres.temperature, tyres.x + 10, tyres.y + tyres.height - 24, tyres.width - 20, theme.color("muted"))
   end
 
   local pit = boxes.cards.pit
@@ -86,18 +105,19 @@ function expanded.render(vm, boxes)
     components.safe_text(point.weather or "UNKNOWN", x, weather.y + 50, cell_width - 4, theme.color("text"))
     components.label(point.condition or "UNKNOWN", x, weather.y + 68, theme.color("cyan"))
   end
+  components.safe_text(vm.weather.wind .. "  |  " .. vm.weather.track .. "  |  Grip " .. vm.weather.grip, weather.x + 10, weather.y + weather.height - 42, weather.width - 20, theme.color("cyan"))
   components.safe_text(vm.weather.source .. "  |  " .. vm.weather.confidence .. "  |  " .. vm.weather.implication, weather.x + 10, weather.y + weather.height - 24, weather.width - 20, theme.color("muted"))
 
   local connections = boxes.cards.connections
-  components.card(connections, "HEALTH", "telemetry", vm.connection_tone)
+  components.card(connections, "TRUST", "telemetry", vm.connection_tone)
   if connections.height >= 50 then
-    components.status_line("ENGINEER", vm.connections.engineer, connections.x + 10, connections.y + 34, connections.width - 20, vm.connection_tone, "engineer")
+    components.status_line("TEL", vm.connections.telemetry_state, connections.x + 10, connections.y + 34, connections.width - 20, vm.health.telemetry.tone, "telemetry")
   end
   if connections.height >= 73 then
-    components.status_line("BRIDGE", vm.connections.bridge, connections.x + 10, connections.y + 57, connections.width - 20, vm.connection_tone, "bridge")
+    components.status_line("BRG", vm.connections.bridge_state, connections.x + 10, connections.y + 57, connections.width - 20, vm.health.bridge.tone, "bridge")
   end
   if connections.height >= 96 then
-    components.status_line("TELEMETRY", vm.connections.telemetry, connections.x + 10, connections.y + 80, connections.width - 20, vm.connection_tone, "telemetry")
+    components.status_line("ENG", vm.connections.engineer_state, connections.x + 10, connections.y + 80, connections.width - 20, vm.health.engineer.tone, "engineer")
   end
 end
 

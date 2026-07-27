@@ -32,6 +32,10 @@ do
       unavailable = "Source unavailable",
       mock = "Garage mock",
     }
+    local engineer = state.engineer_active
+    if type(engineer) == "table" and type(engineer.expiry_s) == "number" and now_s > engineer.expiry_s and engineer.requires_acknowledgement ~= true then
+      engineer = nil
+    end
     local result = {
       schema_version = "driver-status-local-f2",
       source = {
@@ -41,6 +45,11 @@ do
         error = state.source_error,
         freshness_s = calculation.freshness_s,
         diagnostics = state.source_diagnostics,
+      },
+      health = {
+        telemetry = availability,
+        bridge = "NOT_USED",
+        engineer = "NOT_ASSIGNED",
       },
       identity = contracts.identity(snapshot),
       session = {
@@ -76,17 +85,27 @@ do
       },
       pit = calculation.pit,
       alerts = calculation.alerts,
+      configuration = calculation.configuration or {},
+      engineer = {
+        active = engineer,
+        history = state.engineer_history or {},
+      },
       diagnostics = {
         sample_summary = namespace.live.sample_store.summary(state.samples),
         current_regime = state.stint.regime,
         stint_start_monotonic_s = state.stint.start_monotonic_s,
         fuel_at_stint_start_l = state.stint.start_fuel_l,
         calibration = state.calibration,
+        calibration_armed = state.calibration_capture_armed_until ~= nil and now_s <= state.calibration_capture_armed_until,
+        calibration_arm_expires_s = state.calibration_capture_armed_until,
         raw = snapshot,
         source_error = state.source_error,
         source_availability = availability,
         source_diagnostics = state.source_diagnostics,
         last_reset_reason = state.last_reset_reason,
+        excluded_laps = state.samples.excluded_laps,
+        latest_excluded = state.samples.latest_excluded,
+        engineer_history = state.engineer_history or {},
       },
       trace = {},
       updated_s = now_s,
@@ -106,6 +125,7 @@ do
     return {
       schema_version = "driver-status-local-f2",
       source = { mode = source_mode or "live", availability = "unavailable", requested_mode = source_mode, label = "Source unavailable", error = reason, freshness_s = nil, diagnostics = source_diagnostics },
+      health = { telemetry = "unavailable", bridge = "NOT_USED", engineer = "NOT_ASSIGNED" },
       identity = {},
       session = {}, car = {},
       stint = { elapsed = unavailable, completed_laps = unavailable, remaining = unavailable, endpoint = unavailable, progress = unavailable },
@@ -115,6 +135,7 @@ do
       weather = { current = {}, trend = { label = "UNKNOWN", text = "Measured trend: Unavailable" }, future = namespace.live.weather.future() },
       pit = { distance = unavailable, calibrated = false, calibration_reason = reason },
       alerts = { { kind = "SOURCE_UNAVAILABLE", label = "LIVE DATA UNAVAILABLE", priority = 2, reason = reason } },
+      engineer = { active = { message_id = "recovery:source", source = "LOCAL_CALCULATION", severity = "critical", title = "LIVE DATA UNAVAILABLE", detail = reason, priority = 2, requires_acknowledgement = false, acknowledged = false }, history = {} },
       diagnostics = { sample_summary = state and namespace.live.sample_store.summary(state.samples) or {}, current_regime = "unknown", raw = nil, source_error = reason, source_availability = "unavailable", source_diagnostics = source_diagnostics, last_reset_reason = state and state.last_reset_reason or nil },
       trace = {},
       updated_s = nil,

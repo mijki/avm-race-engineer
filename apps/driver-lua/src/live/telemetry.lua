@@ -29,6 +29,11 @@ do
       last_derived_s = nil,
       last_weather_s = nil,
       calibration = nil,
+      calibration_capture_armed_until = nil,
+      engineer_active = nil,
+      engineer_history = {},
+      engineer_last_id = nil,
+      injected_engineer_message = nil,
       last_valid_s = nil,
       last_reset_reason = nil,
     }
@@ -63,6 +68,80 @@ do
     state.last_reset_reason = reason
   end
 
+  local function reset_stint_history(state, reason)
+    store_api.reset_stint(state.samples, reason)
+    state.last_reset_reason = reason
+  end
+
+  local function push_message(state, message)
+    if type(message) ~= "table" then return end
+    if state.engineer_last_id == message.message_id then
+      if state.engineer_active and state.engineer_active.acknowledged == true then
+        message.acknowledged = true
+      end
+      state.engineer_active = message
+      return
+    end
+    state.engineer_last_id = message.message_id
+    state.engineer_active = message
+    state.engineer_history[#state.engineer_history + 1] = message
+    while #state.engineer_history > 6 do table.remove(state.engineer_history, 1) end
+  end
+
+  local function update_engineer(state, calculation, now_s, config)
+    if type(state.injected_engineer_message) == "table" then
+      push_message(state, state.injected_engineer_message)
+      return
+    end
+    local alert = calculation.alerts and calculation.alerts[1]
+    local excluded = state.samples.latest_excluded
+    local message
+    if alert ~= nil then
+      local severity = alert.priority and alert.priority <= 2 and "critical" or alert.priority and alert.priority <= 3 and "caution" or "info"
+      message = {
+        message_id = "local:" .. tostring(alert.kind),
+        source = "LOCAL_CALCULATION",
+        severity = severity,
+        title = alert.label or "ENGINEER",
+        detail = alert.reason or "Measured current state",
+        created_s = now_s,
+        expiry_s = now_s + (((config.alert_expiry_seconds or {}).low) or 35),
+        priority = alert.priority or 5,
+        requires_acknowledgement = alert.requires_acknowledgement == true,
+        acknowledged = false,
+        related_reason = alert.reason,
+      }
+    elseif excluded ~= nil then
+      message = {
+        message_id = "local:excluded:" .. tostring(excluded.lap_number or "latest"),
+        source = "LOCAL_CALCULATION",
+        severity = "info",
+        title = "LATEST LAP EXCLUDED",
+        detail = tostring(excluded.reason or "LAP_EXCLUDED") .. " · representative history preserved",
+        created_s = now_s,
+        expiry_s = now_s + 20,
+        priority = 7,
+        requires_acknowledgement = false,
+        acknowledged = false,
+        related_reason = excluded.reason,
+      }
+    else
+      message = {
+        message_id = "local:normal",
+        source = "LOCAL_CALCULATION",
+        severity = "info",
+        title = "CONTINUE CURRENT PACE",
+        detail = "Measured state · no urgent instruction",
+        created_s = now_s,
+        expiry_s = nil,
+        priority = 8,
+        requires_acknowledgement = false,
+        acknowledged = false,
+      }
+    end
+    push_message(state, message)
+  end
+
   local function derive(state, now_s, config)
     state.calculation = calculations.compute({
       snapshot = state.latest,
@@ -74,6 +153,7 @@ do
       weather = state.weather_current,
       weather_trend = state.weather_trend,
     })
+    update_engineer(state, state.calculation, now_s, config)
     state.status = status_builder.build(state, state.calculation, now_s)
     state.last_derived_s = now_s
   end
@@ -107,10 +187,11 @@ do
       local identity_changed = previous.identity and previous.identity.key ~= snapshot.identity.key
       local lap_decreased = previous.session and snapshot.session and type(previous.session.completed_laps) == "number" and type(snapshot.session.completed_laps) == "number" and snapshot.session.completed_laps < previous.session.completed_laps
       local replay_changed = previous.session and snapshot.session and previous.session.replay ~= snapshot.session.replay
-      local pit_boundary = previous.car and snapshot.car and previous.car.pit_lane ~= snapshot.car.pit_lane
       local refuel_jump = previous.car and snapshot.car and type(previous.car.fuel_l) == "number" and type(snapshot.car.fuel_l) == "number" and snapshot.car.fuel_l - previous.car.fuel_l > config.refuel_jump_l
-      if identity_changed or lap_decreased or replay_changed or pit_boundary or refuel_jump then
-        reset_model_history(state, identity_changed and "IDENTITY_CHANGED" or (lap_decreased and "SESSION_RESTART" or (replay_changed and "REPLAY_STATE_CHANGED" or (refuel_jump and "REFUEL_TRANSITION" or "PIT_BOUNDARY"))))
+      if identity_changed or lap_decreased or replay_changed then
+        reset_model_history(state, identity_changed and "IDENTITY_CHANGED" or (lap_decreased and "SESSION_RESTART" or "REPLAY_STATE_CHANGED"))
+      elseif refuel_jump then
+        reset_stint_history(state, "REFUEL_TRANSITION")
       end
     end
     state.latest = snapshot
@@ -118,11 +199,12 @@ do
     local lap_event = lap_tracker.update(state.lap, snapshot)
     stint_tracker.update(state.stint, snapshot, now_s, config.refuel_jump_l)
     if lap_event then
+      store_api.record_lap(state.samples, lap_event)
       if lap_event.accepted then
-        store_api.add_lap(state.samples, lap_event)
         stint_tracker.accept_lap(state.stint, lap_event)
       end
     end
+    store_api.update_tyre_lap(state.samples, snapshot)
     if state.last_weather_s == nil or now_s - state.last_weather_s >= config.weather_update_period_s then
       state.weather_current = weather.update(state.weather, snapshot.environment, now_s)
       store_api.add_weather(state.samples, state.weather_current)

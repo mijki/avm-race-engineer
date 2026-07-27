@@ -5,6 +5,7 @@ local compact = namespace.ui.compact
 local expanded = namespace.ui.expanded
 local garage = namespace.ui.garage
 local fallback = namespace.ui.fallback
+local theme = namespace.ui.theme
 local app = {}
 local runtime = namespace.runtime
 local lifecycle = runtime.lifecycle or {}
@@ -78,6 +79,15 @@ local function log_layout(width, height, scale, boxes, source, strategy)
     .. " first_card=" .. box_summary(first_card)
     .. " weather=" .. box_summary(weather)
     .. " message=" .. box_summary(message))
+end
+
+local function render_content_surface(boxes)
+  local content = boxes and boxes.content
+  if type(content) ~= "table" or not csp.has("drawRectFilled") then
+    return false
+  end
+  csp.rect(content.x, content.y, content.width, content.height, theme.color("background"), 0)
+  return true
 end
 
 local function render_enhanced_mode(vm, boxes, state)
@@ -228,9 +238,11 @@ function app.windowMain(dt)
   log_once("view_model_ready_logged", "view model ready")
 
   local width, height, boxes
+  local origin_x, origin_y, origin_source
   local layout_ok, layout_error = run_stage("layout", function()
     local source
     width, height, source = csp.window_size()
+    origin_x, origin_y, origin_source = csp.content_origin()
     local scale = csp.ui_scale()
     boxes = layout.for_mode(width, height, state.mode, vm.alert.priority == "critical")
     local valid = layout.valid(boxes, width, height, state.mode, vm.alert.priority == "critical")
@@ -239,6 +251,8 @@ function app.windowMain(dt)
       runtime.record_skip("layout: invalid or off-screen bounds")
     end
     log_layout(width, height, scale, boxes, source, runtime.layout_strategy)
+    log_once("content_origin_logged", "AVM F1 content origin: x=" .. tostring(origin_x)
+      .. " y=" .. tostring(origin_y) .. " source=" .. tostring(origin_source))
   end)
   if not layout_ok then
     recover("layout", layout_error)
@@ -247,6 +261,7 @@ function app.windowMain(dt)
   log_once("layout_ready_logged", "layout ready")
 
   local selected_mode_ok, selected_mode_error = run_stage("selected-mode", function()
+    render_content_surface(boxes)
     runtime.set_render_mode(state.mode)
     local enhanced_ok, enhanced_error = render_enhanced_mode(vm, boxes, state)
     if not enhanced_ok then

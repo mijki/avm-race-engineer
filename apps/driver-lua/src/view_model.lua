@@ -58,6 +58,9 @@ local function live_metric(metric, places)
   local reason = metric and metric.reason
   if reason == "INSUFFICIENT_SAMPLES" then return "Waiting for representative lap" end
   if reason == "PIT_ENTRY_NOT_CALIBRATED" then return "Pit entry not calibrated" end
+  if reason == "PIT_ROUTE_NOT_CONFIGURED" then return "Pit route not configured" end
+  if reason == "TARGET_NOT_CONFIGURED" then return "Not configured" end
+  if reason == "UNSUPPORTED" then return "Unsupported" end
   if reason == "STALE_TELEMETRY" then return "Stale" end
   return "--"
 end
@@ -75,6 +78,317 @@ end
 
 local function live_number(value, decimals, suffix)
   return type(value) == "number" and formatting.number(value, decimals, suffix) or "--"
+end
+
+local function metric_tone(metric, threshold)
+  if type(metric) ~= "table" or type(metric.value) ~= "number" or type(threshold) ~= "number" then
+    return "neutral"
+  end
+  local magnitude = math.abs(metric.value)
+  if magnitude >= threshold * 2 then return "critical" end
+  if magnitude >= threshold then return "warning" end
+  return "good"
+end
+
+local function display_metric(metric, places)
+  return live_metric(metric, places)
+end
+
+local function live_reduce_v2(status, mode)
+  status = status or {}
+  local chosen_mode = mode or "compact"
+  local identity = status.identity or {}
+  local session = status.session or {}
+  local fuel = status.fuel or {}
+  local pace = status.pace or {}
+  local tyres = status.tyres or {}
+  local weather = status.weather or {}
+  local current_weather = weather.current or {}
+  local future = weather.future or {}
+  local diagnostics = status.diagnostics or {}
+  local configuration = status.configuration or {}
+  local source = status.source or { mode = "live", availability = "unavailable", label = "Source unavailable" }
+  local availability = source.availability or "unavailable"
+  local source_labels = { live = "LIVE", partial = "PARTIAL", stale = "STALE", unavailable = "OFFLINE", mock = "MOCK" }
+  local source_label = source_labels[availability] or "OFFLINE"
+  local source_tone = availability == "live" and "good" or availability == "stale" and "stale" or availability == "partial" and "warning" or "critical"
+  local progress = status.stint and status.stint.progress and status.stint.progress.value or 0
+  local engineer = status.engineer and status.engineer.active or nil
+  local alert = status.alerts and status.alerts[1] or nil
+  local current_or_alert_title = engineer and engineer.title or alert and alert.label or "NO ACTIVE INSTRUCTION"
+  local current_or_alert_detail = engineer and engineer.detail or alert and alert.reason or "Measured current state · no urgent instruction"
+  local alert_priority = engineer and engineer.priority or alert and alert.priority or 8
+  if availability == "unavailable" then
+    current_or_alert_title = "LIVE DATA UNAVAILABLE"
+    current_or_alert_detail = "Open Garage diagnostics for the local CSP source failure."
+    alert_priority = 1
+  elseif availability == "stale" then
+    current_or_alert_title = "LIVE DATA STALE"
+    current_or_alert_detail = "Last valid values are retained; risky recommendations are suppressed."
+    alert_priority = 3
+  end
+  local alert_tone = alert_priority <= 2 and "critical" or alert_priority <= 5 and "warning" or "info"
+  local function health(state, label, detail)
+    local good = state == "LIVE" or state == "CONNECTED"
+    local degraded = state == "PARTIAL" or state == "STALE" or state == "DEGRADED"
+    return {
+      state = state,
+      label = label,
+      detail = detail,
+      tone = good and "good" or degraded and "warning" or (state == "MOCK" or state == "NOT USED" or state == "NOT ASSIGNED") and "stale" or "critical",
+      shape = good and "filled" or degraded and "warning" or (state == "MOCK" or state == "NOT USED" or state == "NOT ASSIGNED") and "hollow" or "crossed",
+    }
+  end
+  local tel = health(source_label, "TEL", source.label or "Local CSP telemetry")
+  local bridge = health("NOT USED", "BRG", "Bridge is not configured in the local-only slice")
+  local engineer_health = health("NOT ASSIGNED", "ENG", "Engineer source is not configured")
+  local pit_metric = status.pit and status.pit.distance or nil
+  local pit_reason = status.pit and status.pit.calibration_reason or "PIT_ENTRY_NOT_CALIBRATED"
+  local pressure_unit = configuration.pressure_unit == "kPa" and "kPa" or "psi"
+  local pace_threshold = configuration.pace_delta_threshold_s or 0.50
+  local fuel_threshold = configuration.fuel_comparison_threshold_l or 0.05
+  local pressure_threshold = configuration.pressure_delta_threshold_psi or 0.50
+  local wheel_values = {}
+  for index = 1, 4 do
+    local wheel = tyres.wheels and tyres.wheels[index] or {}
+    local pressure_metric = pressure_unit == "kPa" and wheel.pressure_kpa or wheel.pressure_psi
+    local pressure_target_metric = pressure_unit == "kPa" and wheel.pressure_target_kpa or wheel.pressure_target_psi
+    local pressure_delta = pressure_unit == "kPa" and wheel.pressure_delta_kpa or wheel.pressure_delta_psi
+    local damage = {}
+    if wheel.flat_spot and wheel.flat_spot.value and wheel.flat_spot.value >= 10 then damage[#damage + 1] = "FLAT SPOT " .. live_metric(wheel.flat_spot, 0) end
+    local wheel_tone = wheel.state == "FLAT_SPOTTED" and "critical" or wheel.state == "OPTIMAL" and "good" or wheel.state == "UNKNOWN" and "stale" or "warning"
+    local pressure_tone = metric_tone(pressure_delta, pressure_threshold)
+    local temperature_tone = metric_tone(wheel.temperature_delta_c, configuration.temperature_delta_threshold_c or 15)
+    if wheel_tone == "good" and pressure_tone ~= "neutral" and pressure_tone ~= "good" then wheel_tone = pressure_tone end
+    if wheel_tone == "good" and temperature_tone ~= "neutral" and temperature_tone ~= "good" then wheel_tone = temperature_tone end
+    wheel_values[index] = {
+      label = wheel.label or ({ "FL", "FR", "RL", "RR" })[index],
+      temperature = live_metric(wheel.core_c, 0),
+      temperature_target = live_metric(wheel.temperature_target_c, 0),
+      temperature_delta = live_metric(wheel.temperature_delta_c, 0),
+      lap_min = live_number(wheel.lap_min_c, 0, " C"),
+      lap_max = live_number(wheel.lap_max_c, 0, " C"),
+      pressure = display_metric(pressure_metric, 1),
+      pressure_target = display_metric(pressure_target_metric, 1),
+      pressure_target_source = wheel.pressure_target_source or "UNAVAILABLE",
+      pressure_delta = live_metric(pressure_delta, 1),
+      life = live_metric(wheel.life, 0),
+      wear = live_metric(wheel.wear, 0),
+      damage = #damage > 0 and table.concat(damage, " · ") or "",
+      state = formatting.readable_tyre_state(wheel.state or "UNKNOWN"),
+      grain = live_metric(wheel.grain, 0),
+      blister = live_metric(wheel.blister, 0),
+      tone = wheel_tone,
+      pressure_tone = pressure_tone,
+    }
+  end
+  local weather_type = current_weather.weather_type and formatting.weather_type(current_weather.weather_type, current_weather) or "Unknown"
+  local weather_condition = formatting.track_condition(current_weather.track_wetness, current_weather.rain_intensity, "Unknown")
+  local wind_speed = live_number(current_weather.wind_kmh, 0, " km/h")
+  local wind_direction = current_weather.wind_cardinal or formatting.cardinal_direction(current_weather.wind_direction_deg, nil)
+  local wind = wind_direction and wind_speed .. " · " .. wind_direction or (current_weather.wind_kmh and wind_speed or "Wind unavailable")
+  local context = status.stint and status.stint.current_lap and live_metric(status.stint.current_lap, 0) or "--"
+  local elapsed_context = live_duration(status.stint and status.stint.elapsed)
+  local remaining_context = live_duration(status.stint and status.stint.remaining)
+  local remaining_estimated = status.stint and status.stint.remaining and status.stint.remaining.value ~= nil and status.stint.remaining.reason ~= "session time"
+  local header_parts = {}
+  if status.stint and status.stint.current_lap and status.stint.current_lap.value ~= nil then
+    header_parts[#header_parts + 1] = "STINT " .. formatting.number(status.stint.current_lap.value, 0, "")
+  end
+  if session.current_lap then header_parts[#header_parts + 1] = "LAP " .. tostring(session.current_lap) end
+  if elapsed_context ~= "--:--" then header_parts[#header_parts + 1] = elapsed_context end
+  if remaining_context ~= "--:--" then header_parts[#header_parts + 1] = remaining_context .. (remaining_estimated and "~" or "") end
+  if session.remaining_s then header_parts[#header_parts + 1] = formatting.time(session.remaining_s) .. " LEFT" end
+  local header_context = table.concat(header_parts, " / ")
+  local connection_age = source.freshness_s and formatting.number(source.freshness_s * 1000, 0, " ms") or "--"
+  return {
+    mode = chosen_mode,
+    available = availability ~= "unavailable",
+    fallback = availability == "unavailable",
+    fallback_reason = formatting.reason(source.error),
+    product_name = namespace.config.product_name,
+    build_name = namespace.config.build_name,
+    session_name = formatting.session_type(session.type),
+    scenario_id = source.mode == "mock" and "MOCK" or "LIVE",
+    lap = session.current_lap and tostring(session.current_lap) or "--",
+    planned_lap = session.lap_limit and tostring(session.lap_limit) or "--",
+    stint = live_metric(status.stint and status.stint.completed_laps, 0),
+    stint_lap = context,
+    total_stints = "--",
+    progress = progress,
+    connection_state = availability,
+    connection_tone = tone_for_connection(availability == "partial" and "degraded" or availability),
+    confidence = formatting.confidence(fuel.per_lap and fuel.per_lap.confidence_band),
+    confidence_tone = fuel.per_lap and fuel.per_lap.confidence_band == "high" and "good" or "warning",
+    source = { availability = availability, state = source_label, label = source_label, detail = current_or_alert_detail, error = source.error, diagnostics = source.diagnostics },
+    health = { telemetry = tel, bridge = bridge, engineer = engineer_health },
+    alert = {
+      text = formatting.reason(current_or_alert_title),
+      detail = formatting.reason(current_or_alert_detail),
+      priority = alert_priority <= 2 and "high" or alert_priority <= 5 and "normal" or "low",
+      tone = alert_tone,
+      requires_acknowledgement = engineer and engineer.requires_acknowledgement == true or alert and alert.requires_acknowledgement == true or false,
+      acknowledged = engineer and engineer.acknowledged == true or false,
+      alert_id = engineer and engineer.message_id or alert and alert.kind or "live-measurements",
+      family = engineer and engineer.source or "live_measurements",
+      status = engineer and engineer.acknowledged and "ACKNOWLEDGED" or engineer and engineer.requires_acknowledgement and "ACK" or "VISIBLE",
+    },
+    timing = {
+      elapsed = live_duration(status.stint and status.stint.elapsed),
+      remaining = live_duration(status.stint and status.stint.remaining),
+      target = live_duration(status.stint and status.stint.endpoint),
+      remaining_is_estimated = status.stint and status.stint.remaining and status.stint.remaining.value ~= nil and status.stint.remaining.reason ~= "session time" or false,
+      progress = progress,
+      context = context,
+    },
+    fuel = {
+      current = live_metric(fuel.current, 1),
+      range = live_metric(fuel.laps_remaining, 1),
+      distance_to_pit = live_metric(pit_metric, 0),
+      pit_route = live_number(status.pit and status.pit.route_additional_m, 0, " m"),
+      expected_at_pit = live_metric(fuel.predicted_at_pit, 1),
+      delta = live_metric(fuel.delta_target, 2),
+      target = live_metric(fuel.target_per_lap, 2),
+      average = live_metric(fuel.per_lap, 2),
+      latest_valid = live_metric(fuel.latest_valid, 2),
+      latest_completed = live_metric(fuel.latest_completed, 2),
+      vs_target = live_metric(fuel.delta_target, 2),
+      vs_average = live_metric(fuel.delta_average, 2),
+      average_vs_target = live_metric(fuel.average_vs_target, 2),
+      required_saving = "--",
+      next_stop = "--",
+      used = live_metric(fuel.used_stint, 1),
+      per_lap = live_metric(fuel.per_lap, 2),
+      per_km = live_metric(fuel.per_km, 2),
+      per_min = live_metric(fuel.per_min, 2),
+      confidence = formatting.confidence(fuel.per_lap and fuel.per_lap.confidence_band),
+      pit_reason = formatting.reason(pit_reason),
+      predicted_metric = fuel.predicted_at_pit,
+      target_delta = live_metric(fuel.delta_target, 2),
+      status = alert and alert.kind == "SAVE_FUEL" and "SAVE FUEL" or "Measured range",
+      tone = metric_tone(fuel.delta_target, fuel_threshold),
+    },
+    pace = {
+      delta = live_metric(pace.delta_to_target or pace.delta, 2),
+      delta_metric = pace.delta_to_target or pace.delta,
+      target = live_metric(pace.target, 3),
+      average = live_metric(pace.rolling, 3),
+      latest_valid = live_metric(pace.latest_valid, 3),
+      latest_completed = live_metric(pace.latest_completed, 3),
+      vs_target = live_metric(pace.delta_to_target, 3),
+      vs_average = live_metric(pace.delta_to_average, 3),
+      average_vs_target = live_metric(pace.average_vs_target, 3),
+      status = availability == "unavailable" and "--" or pace.delta_to_target and pace.delta_to_target.value and pace.delta_to_target.value > pace_threshold and "SLOWER THAN TARGET" or pace.latest_valid and pace.latest_valid.value and "ON TARGET" or "WAITING FOR VALID LAP",
+      tone = metric_tone(pace.delta_to_target, pace_threshold),
+      last_lap = live_metric(pace.latest_valid, 3),
+      trend = formatting.confidence(pace.rolling and pace.rolling.confidence_band),
+      trend_values = {},
+      current = live_metric(pace.current, 3),
+      rolling = live_metric(pace.rolling, 3),
+      confidence = formatting.confidence(pace.rolling and pace.rolling.confidence_band),
+    },
+    tyres = {
+      compound = tyres.compound and formatting.weather_type(tyres.compound) or "--",
+      wear = live_metric(tyres.wear, 0),
+      condition = formatting.readable_tyre_state(tyres.state or "UNKNOWN"),
+      state = formatting.readable_tyre_state(tyres.state or "UNKNOWN"),
+      temperature = live_metric(tyres.core_c, 0) .. " / " .. live_metric(tyres.surface_c, 0),
+      wheels = wheel_values,
+      wheel_values = wheel_values,
+      temperature_source = tyres.temperature_source or "CSP tyreCoreTemperature",
+      color_tone = tyres.state == "OPTIMAL" and "good" or tyres.state == "UNKNOWN" and "stale" or "warning",
+    },
+    pit = {
+      window = live_metric(pit_metric, 0),
+      recommendation = alert and formatting.reason(alert.label) or (pit_metric and "CALIBRATED" or "CONFIGURE IN GARAGE"),
+      next_fuel = "--",
+      next_tyres = "--",
+      service = "--",
+      state = status.pit and status.pit.calibrated and "CALIBRATED" or "NOT CALIBRATED",
+      box_in_laps = nil,
+    },
+    weather = {
+      label = "MEASURED",
+      current = weather_type,
+      condition = weather_condition,
+      next_change = future.text or "No reliable future forecast",
+      eta = "No ETA",
+      source = current_weather.source or "Measured now",
+      confidence = availability == "live" and "High confidence" or "Unknown",
+      implication = "No forecast promise",
+      crossover = "No tyre crossover signal",
+      authoritative = future.authoritative == true,
+      temperatures = "Air " .. live_number(current_weather.ambient_c, 0, " C") .. " / Road " .. live_number(current_weather.road_c, 0, " C"),
+      wind = wind,
+      wind_degrees = current_weather.wind_direction_deg and live_number(current_weather.wind_direction_deg, 0, "°") or "Unavailable",
+      track = weather_condition .. " · " .. live_number(current_weather.track_wetness and current_weather.track_wetness * 100, 0, "% wet"),
+      grip = current_weather.grip and formatting.grip(current_weather.grip) or "Unavailable",
+      trend = weather.trend and weather.trend.text or "Trend unavailable",
+      future = future.text or "No reliable future forecast",
+      timeline = {},
+    },
+    connections = {
+      engineer = "NOT ASSIGNED",
+      bridge = "NOT USED",
+      telemetry = connection_age,
+      source = source_label,
+      telemetry_state = tel.state,
+      bridge_state = bridge.state,
+      engineer_state = engineer_health.state,
+    },
+    header = {
+      session = formatting.session_type(session.type),
+      lap = session.current_lap and ("LAP " .. tostring(session.current_lap)) or "LAP --",
+      position = session.position and session.total_cars and (tostring(session.position) .. "/" .. tostring(session.total_cars)) or "--",
+      source = source_label,
+      source_mode = source.mode,
+      source_tone = source_tone,
+      context = header_context,
+      indicators = { telemetry = tel, bridge = bridge, engineer = engineer_health },
+    },
+    raw = {
+      speed = live_number(status.car and status.car.speed_kmh, 0, " km/h"),
+      spline = live_number(status.car and status.car.spline, 3, ""),
+      pit_lane = status.car and (status.car.pit_lane == nil and "Unavailable" or status.car.pit_lane and "Yes" or "No") or "Unavailable",
+      pit_box = status.car and (status.car.pit_box == nil and "Unavailable" or status.car.pit_box and "Yes" or "No") or "Unavailable",
+    },
+    diagnostics = {
+      samples_laps = diagnostics.sample_summary and diagnostics.sample_summary.laps or 0,
+      samples_fuel = diagnostics.sample_summary and diagnostics.sample_summary.fuel or 0,
+      samples_pace = diagnostics.sample_summary and diagnostics.sample_summary.pace or 0,
+      samples_weather = diagnostics.sample_summary and diagnostics.sample_summary.weather or 0,
+      excluded_laps = diagnostics.sample_summary and diagnostics.sample_summary.excluded or 0,
+      excluded_reason = diagnostics.sample_summary and diagnostics.sample_summary.latest_excluded_reason or nil,
+      regime = live_safe(diagnostics.current_regime),
+      freshness = source.freshness_s and formatting.number(source.freshness_s, 1, " s") or "--",
+      update_age = source.diagnostics and source.diagnostics.update_age_s and formatting.number(source.diagnostics.update_age_s, 1, " s") or "--",
+      source_error = source.error or diagnostics.source_error,
+      first_failure = source.diagnostics and source.diagnostics.first_failure or source.error,
+      probe = source.diagnostics and source.diagnostics.probe or "Unavailable",
+      normalization_rejection = source.diagnostics and source.diagnostics.first_normalization_rejection or "None",
+      api = source.diagnostics and source.diagnostics.api or {},
+      core_valid = source.diagnostics and source.diagnostics.normalized_core and source.diagnostics.normalized_core.valid or false,
+      core_missing = source.diagnostics and source.diagnostics.normalized_core and source.diagnostics.normalized_core.missing or {},
+      optional_missing = source.diagnostics and source.diagnostics.optional_missing or {},
+      identity = identity,
+      last_reset_reason = diagnostics.last_reset_reason,
+      raw = diagnostics.raw,
+      calibration = diagnostics.calibration,
+      calibration_armed = diagnostics.calibration_armed,
+      engineer_history = status.engineer and status.engineer.history or {},
+    },
+    calibration = {
+      summary = diagnostics.calibration and ("Validated for " .. live_safe(diagnostics.calibration.track_id) .. " / " .. live_safe(diagnostics.calibration.layout_id)) or formatting.reason(pit_reason),
+      track_id = diagnostics.calibration and diagnostics.calibration.track_id,
+      layout_id = diagnostics.calibration and diagnostics.calibration.layout_id,
+      pit_entry_spline = diagnostics.calibration and diagnostics.calibration.pit_entry_spline,
+      route_additional_m = status.pit and status.pit.route_additional_m,
+      status = status.pit and status.pit.calibrated and "CALIBRATED" or "NOT CALIBRATED",
+      armed = diagnostics.calibration_armed == true,
+    },
+    configuration = status.configuration or {},
+    trace = status.trace or {},
+  }
 end
 
 local function live_reduce(status, mode)
@@ -276,7 +590,7 @@ end
 
 function view_model.reduce(envelope, mode)
   if type(envelope) == "table" and envelope.schema_version == "driver-status-local-f2" then
-    return live_reduce(envelope, mode)
+    return live_reduce_v2(envelope, mode)
   end
   local chosen_mode = mode or "compact"
   local snapshot, wrapper = contracts.unwrap_snapshot(envelope)

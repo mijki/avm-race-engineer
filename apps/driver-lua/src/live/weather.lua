@@ -7,6 +7,14 @@ do
     return math.max(0, math.min(1, value))
   end
 
+  local function cardinal(degrees)
+    if type(degrees) ~= "number" then return nil end
+    local normalized = degrees % 360
+    local directions = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
+    local index = math.floor((normalized + 22.5) / 45) % 8 + 1
+    return directions[index]
+  end
+
   function weather.new(max_samples)
     return { history = {}, max_samples = max_samples or 20, last_update_s = nil }
   end
@@ -17,6 +25,8 @@ do
       ambient_c = environment.ambient_c,
       road_c = environment.road_c,
       wind_kmh = environment.wind_kmh,
+      wind_direction_deg = environment.wind_direction_deg,
+      wind_cardinal = cardinal(environment.wind_direction_deg),
       weather_type = environment.weather_type,
       rain_intensity = clamp(environment.rain_intensity),
       track_wetness = clamp(environment.track_wetness),

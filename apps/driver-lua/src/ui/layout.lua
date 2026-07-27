@@ -26,9 +26,12 @@ function layout.for_mode(width, height, mode, critical)
   height = safe_size(height, 380)
   local margin = 8
   local gap = 6
-  local outer = { x = margin, y = 6, width = math.max(280, width - margin * 2), height = math.max(150, height - 12) }
-  local header_height = mode == "garage" and 32 or clamp(height * 0.08, 26, 32)
+  local outer = { x = margin, y = 6, width = math.max(1, width - margin * 2), height = math.max(1, height - 12) }
+  local header_height = mode == "garage" and 32 or clamp(height * 0.09, 28, 34)
   local result = {
+    -- `content` is the opaque fill owned by AVM. CSP's native title bar is
+    -- outside this region and remains untouched by the application renderer.
+    content = card(0, 0, width, height),
     outer = outer,
     header = card(outer.x, outer.y, outer.width, header_height),
     banner = nil,
@@ -38,23 +41,28 @@ function layout.for_mode(width, height, mode, critical)
   }
 
   if mode == "compact" then
-    local footer_height = clamp(height * 0.085, 30, 38)
+    local footer_height = clamp(height * 0.13, 42, 54)
     local body_y = outer.y + header_height + gap
     local footer_y = outer.y + outer.height - footer_height
-    local body_height = math.max(52, footer_y - gap - body_y)
-    local primary_height = math.floor((body_height - gap) * 0.58)
-    primary_height = clamp(primary_height, 72, math.max(72, body_height - gap - 52))
-    local secondary_height = body_height - primary_height - gap
-    if secondary_height < 52 then
-      secondary_height = 52
-      primary_height = math.max(42, body_height - secondary_height - gap)
+    local body_height = math.max(1, footer_y - gap - body_y)
+    local large = width >= 850
+    local primary_height = large and clamp(body_height * 0.50, 76, 128) or clamp(body_height * 0.32, 62, 112)
+    local pit_height = large and primary_height or clamp(body_height * 0.23, 50, 78)
+    local secondary_height = body_height - primary_height - (large and gap or gap * 2) - (large and 0 or pit_height)
+    if secondary_height < 48 then
+      secondary_height = math.max(42, body_height - primary_height - (large and gap or gap * 2) - (large and 0 or pit_height))
     end
-    local primary_width = (outer.width - gap * 2) / 3
+    local primary_width = large and (outer.width - gap * 2) / 3 or (outer.width - gap) / 2
     local secondary_width = (outer.width - gap) / 2
     result.cards.fuel = card(outer.x, body_y, primary_width, primary_height)
     result.cards.pace = card(outer.x + primary_width + gap, body_y, primary_width, primary_height)
-    result.cards.pit = card(outer.x + (primary_width + gap) * 2, body_y, primary_width, primary_height)
-    local secondary_y = body_y + primary_height + gap
+    if large then
+      result.cards.pit = card(outer.x + (primary_width + gap) * 2, body_y, primary_width, primary_height)
+    else
+      local pit_y = body_y + primary_height + gap
+      result.cards.pit = card(outer.x, pit_y, outer.width, pit_height)
+    end
+    local secondary_y = large and (body_y + primary_height + gap) or (body_y + primary_height + gap + pit_height + gap)
     result.cards.tyres = card(outer.x, secondary_y, secondary_width, secondary_height)
     result.cards.weather = card(outer.x + secondary_width + gap, secondary_y, secondary_width, secondary_height)
     result.footer = card(outer.x, footer_y, outer.width, footer_height)
@@ -63,7 +71,7 @@ function layout.for_mode(width, height, mode, critical)
     result.cards.message = result.footer
   elseif mode == "expanded" then
     local body_y = outer.y + header_height + gap
-    local body_height = math.max(110, outer.y + outer.height - body_y)
+    local body_height = math.max(1, outer.y + outer.height - body_y)
     local row_gap = gap
     local row_height = math.max(24, (body_height - row_gap * 4) / 5)
     local left_card_height = math.max(24, (body_height - row_gap * 2) / 3)
@@ -82,9 +90,9 @@ function layout.for_mode(width, height, mode, critical)
     local body_y = outer.y + header_height + gap
     local overview_height = 50
     local controls_y = body_y + overview_height + gap
-    local controls_height = 86
+    local controls_height = math.min(160, math.max(86, outer.y + outer.height - controls_y - gap - 1))
     local diagnostics_y = controls_y + controls_height + gap
-    local diagnostics_height = math.max(52, outer.y + outer.height - diagnostics_y)
+    local diagnostics_height = math.max(1, outer.y + outer.height - diagnostics_y)
     result.cards.overview = card(outer.x, body_y, outer.width, overview_height)
     result.cards.scenarios = card(outer.x, controls_y, outer.width * 0.58, controls_height)
     result.cards.settings = card(outer.x + outer.width * 0.58 + gap, controls_y, outer.width * 0.42 - gap, controls_height)
@@ -151,6 +159,7 @@ function layout.required_boxes(width, height, mode, critical)
   local fallback_width = math.max(160, width - 20)
   local fallback_height = math.max(120, height - 20)
   return {
+    content = result.content,
     header = result.header,
     stint_timing = cards.timing or cards.overview or result.header,
     fuel = cards.fuel or cards.overview or result.header,

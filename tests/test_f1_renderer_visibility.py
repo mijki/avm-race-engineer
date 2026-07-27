@@ -21,6 +21,7 @@ class F1RendererVisibilityTests(unittest.TestCase):
         cls.bootstrap = (SRC / "bootstrap.lua").read_text(encoding="utf-8")
         cls.app = (SRC / "app.lua").read_text(encoding="utf-8")
         cls.compact = (SRC / "ui" / "compact_mode.lua").read_text(encoding="utf-8")
+        cls.components = (SRC / "ui" / "components.lua").read_text(encoding="utf-8")
         cls.expanded = (SRC / "ui" / "expanded_mode.lua").read_text(encoding="utf-8")
         cls.garage = (SRC / "ui" / "garage_mode.lua").read_text(encoding="utf-8")
         cls.layout = (SRC / "ui" / "layout.lua").read_text(encoding="utf-8")
@@ -104,11 +105,15 @@ class F1RendererVisibilityTests(unittest.TestCase):
         for label in ("result.cards.fuel", "result.cards.pace", "result.cards.pit", "result.cards.tyres", "result.cards.weather", "result.cards.engineer"):
             self.assertIn(label, self.layout)
         self.assertIn('result.banner = result.footer', self.layout)
-        self.assertIn('components.badge(vm.header.source', self.compact)
+        self.assertIn('components.header(vm, header)', self.compact)
+        self.assertIn('function components.header(vm, box)', self.components)
+        self.assertIn('components.indicator(indicators.telemetry', self.components)
+        self.assertIn('components.indicator(indicators.bridge', self.components)
+        self.assertIn('components.indicator(indicators.engineer', self.components)
         self.assertIn('components.card(status, "ENGINEER"', self.compact)
 
     def test_compact_renderer_uses_explicit_rows_and_bounded_values(self) -> None:
-        self.assertIn('local first_y = box.y + 31', self.compact)
+        self.assertIn('local first_y = box.y + (box.height < 70 and 27 or 31)', self.compact)
         self.assertIn('local second_y = box.y + math.min(68, math.max(58, box.height - 38))', self.compact)
         self.assertIn('if box.height >= 96 then', self.compact)
         self.assertIn('components.safe_text(value or "--"', self.compact)
@@ -118,7 +123,7 @@ class F1RendererVisibilityTests(unittest.TestCase):
     def test_expanded_rows_and_shared_safe_text_guard_long_values(self) -> None:
         components = (SRC / "ui" / "components.lua").read_text(encoding="utf-8")
         self.assertIn('local max_chars = math.max(1, math.floor(width / 7))', components)
-        self.assertIn('safe = string.sub(safe, 1, keep) .. "..."', components)
+        self.assertIn('safe = short[safe] or string.sub(safe, 1, max_chars)', components)
         self.assertIn('components.safe_text(value or "--", box.x + 10, y + 15', self.expanded)
 
     def test_invalid_alpha_and_clip_failures_do_not_silently_draw(self) -> None:
@@ -131,7 +136,7 @@ class F1RendererVisibilityTests(unittest.TestCase):
         for field in ("native", "mode_text", "enhanced", "degraded", "skipped", "first_skip"):
             self.assertIn(field, self.bootstrap)
         self.assertIn('runtime.log_once("render_evidence_logged"', self.bootstrap)
-        self.assertIn('if not lifecycle.mode_content_ready and not lifecycle.initialization_attempted then', self.bootstrap)
+        self.assertIn('if runtime.app_entry == nil and not lifecycle.mode_content_ready and not lifecycle.initialization_attempted then', self.bootstrap)
         self.assertIn('lifecycle.mode_content_ready = true', self.app)
 
     def test_bundle_scope_and_determinism(self) -> None:

@@ -205,6 +205,21 @@ function csp.window_size()
   return 780, 380, "fallback"
 end
 
+-- Enhanced draw calls use the active CSP working area. Expose the native
+-- origin for Garage diagnostics and future screen-space adapters without
+-- making UI modules depend on CSP coordinates.
+function csp.content_origin()
+  local status, result = read_ui_member("cursorStartPos")
+  if (status == "drawn" or status == "value") and valid_vector(result) then
+    return vector_field(result, "x"), vector_field(result, "y"), "cursorStartPos"
+  end
+  status, result = read_ui_member("windowPos")
+  if (status == "drawn" or status == "value") and valid_vector(result) then
+    return vector_field(result, "x"), vector_field(result, "y"), "windowPos"
+  end
+  return 0, 0, "window-local"
+end
+
 function csp.ui_scale()
   local status, result = read_ui_member("uiScale")
   if (status == "drawn" or status == "value") and valid_number(result) and result > 0 then
@@ -233,6 +248,8 @@ function csp.capabilities()
     "ui.availableSpaceX",
     "ui.availableSpaceY",
     "ui.windowContentSize",
+    "ui.windowPos",
+    "ui.cursorStartPos",
     "ui.drawText",
     "ui.drawTextClipped",
     "ui.drawRectFilled",
@@ -245,6 +262,8 @@ function csp.capabilities()
     "ui.checkbox",
     "ui.setCursorScreenPos",
     "ui.invisibleButton",
+    "ui.inputText",
+    "ui.slider",
   }
   local missing_mandatory = {}
   for index = 1, #mandatory_names do
@@ -301,6 +320,7 @@ function csp.capabilities()
     incompatible_optional = incompatible_optional,
     optional_draw_text_clipped = csp.has("drawTextClipped"),
     optional_buttons = csp.has("invisibleButton") and csp.has("setCursorScreenPos"),
+    optional_configuration = csp.has("inputText") and csp.has("slider"),
   }
 end
 
@@ -348,7 +368,7 @@ function csp.text_aligned(value, x, y, width, color, height)
   local right = point(x + math.max(1, width), y + clip_height)
   local alignment = point(0, 0)
   if left ~= nil and right ~= nil and alignment ~= nil and valid_color(color) then
-    local status, _, reason = call_ui("drawTextClipped", text, left, right, color, alignment, true)
+    local status, _, reason = call_ui("drawTextClipped", text, left, right, color, alignment, false)
     if status == "drawn" then
       namespace.runtime.record_draw("enhanced")
       return status
@@ -441,6 +461,30 @@ end
 function csp.checkbox(label, checked)
   local status, clicked = call_ui("checkbox", label, checked == true)
   return status == "drawn" and clicked == true
+end
+
+function csp.input_text(label, value)
+  local callback = member(ui_api(), "inputText")
+  if callback == nil or not callable(callback) then return value, false end
+  local ok, result, changed = pcall(callback, label, tostring(value or ""))
+  if ok and type(result) == "string" then return result, changed == true end
+  return value, false
+end
+
+function csp.input_text_at(label, value, x, y)
+  local cursor = point(x, y)
+  if cursor ~= nil and csp.has("setCursorScreenPos") then
+    call_ui("setCursorScreenPos", cursor)
+  end
+  return csp.input_text(label, value)
+end
+
+function csp.slider(label, value, minimum, maximum, format)
+  local callback = member(ui_api(), "slider")
+  if callback == nil or not callable(callback) or type(value) ~= "number" then return value, false end
+  local ok, result, changed = pcall(callback, label, value, minimum, maximum, format)
+  if ok and type(result) == "number" then return result, changed == true end
+  return value, false
 end
 
 function csp.separator(color)
@@ -748,11 +792,13 @@ function csp.normalize(raw, observed_monotonic_s, source_mode)
       wear = tyres.wear,
       pressure_kpa = tyres.pressure_kpa,
       optimum_c = tyres.optimum_c,
+      wheels = tyres.wheels,
     },
     environment = {
       ambient_c = environment.ambient_c,
       road_c = environment.road_c,
       wind_kmh = environment.wind_kmh,
+      wind_direction_deg = environment.wind_direction_deg,
       weather_type = environment.weather_type,
       rain_intensity = environment.rain_intensity,
       track_wetness = environment.track_wetness,
@@ -865,20 +911,54 @@ local function read_live_telemetry()
   local compound = api_value("getTyresName", 0)
   local wheels = telemetry_field(car, "wheels") or {}
   local core_sum, surface_sum, pressure_sum, wear_sum, optimum_sum, wheel_count = 0, 0, 0, 0, 0, 0
+  local wheel_values = {}
+  local wheel_labels = { "FL", "FR", "RL", "RR" }
+  local zero_based_wheels = telemetry_index(wheels, 0) ~= nil
   for index = 0, 3 do
-    local wheel = telemetry_index(wheels, index) or telemetry_index(wheels, index + 1)
+    local wheel_index = zero_based_wheels and index or index + 1
+    local wheel = telemetry_index(wheels, wheel_index)
     if wheel ~= nil then
       local core = telemetry_first(wheel, { "tyreCoreTemperature", "coreTemperature" })
       local surface = telemetry_first(wheel, { "tyreMiddleTemperature", "tyreSurfaceTemperature", "surfaceTemperature" })
       local pressure = telemetry_first(wheel, { "tyrePressure", "pressure" })
       local wear = telemetry_first(wheel, { "tyreWear", "wear" })
       local optimum = telemetry_first(wheel, { "tyreOptimumTemperature", "optimumTemperature" })
+      local inside = telemetry_first(wheel, { "tyreInsideTemperature", "insideTemperature" })
+      local middle = telemetry_first(wheel, { "tyreMiddleTemperature", "middleTemperature" })
+      local outside = telemetry_first(wheel, { "tyreOutsideTemperature", "outsideTemperature" })
+      local static_pressure = telemetry_first(wheel, { "tyreStaticPressure", "staticPressure" })
+      local grain = telemetry_first(wheel, { "tyreGrain", "grain" })
+      local blister = telemetry_first(wheel, { "tyreBlister", "blister" })
+      local flat_spot = telemetry_first(wheel, { "tyreFlatSpot", "flatSpot" })
       if telemetry_finite(core) then core_sum = core_sum + core end
       if telemetry_finite(surface) then surface_sum = surface_sum + surface end
       if telemetry_finite(pressure) then pressure_sum = pressure_sum + pressure end
       if telemetry_finite(wear) then wear_sum = wear_sum + wear end
       if telemetry_finite(optimum) then optimum_sum = optimum_sum + optimum end
       if core ~= nil or surface ~= nil or pressure ~= nil or wear ~= nil then wheel_count = wheel_count + 1 end
+      wheel_values[index + 1] = {
+        label = wheel_labels[index + 1],
+        core_c = core,
+        inside_c = inside,
+        middle_c = middle,
+        outside_c = outside,
+        optimum_c = optimum,
+        pressure_psi = pressure,
+        pressure_kpa = telemetry_finite(pressure) and pressure * 6.894757293 or nil,
+        static_pressure_psi = static_pressure,
+        wear = wear,
+        grain = grain,
+        blister = blister,
+        flat_spot = flat_spot,
+        -- The installed SDK documents the fields but not ranges for grain and
+        -- blister. Preserve raw values for Garage diagnostics; only flat spot
+        -- has a verified unit-scale reference in the inspected apps.
+        damage_scale = {
+          grain = "UNVERIFIED",
+          blister = "UNVERIFIED",
+          flat_spot = "CSP_REFERENCE_0_TO_1",
+        },
+      }
     end
   end
   local function milliseconds(value)
@@ -892,7 +972,7 @@ local function read_live_telemetry()
   local current_session_time_ms = telemetry_field(sim, "currentSessionTime")
   local session_time_left_ms = telemetry_field(sim, "sessionTimeLeft")
   local environment_fields = {}
-  for _, name in ipairs({ "ambientTemperature", "roadTemperature", "weatherType", "rainIntensity", "rainWetness", "rainWater", "roadGrip" }) do
+  for _, name in ipairs({ "ambientTemperature", "roadTemperature", "weatherType", "rainIntensity", "rainWetness", "rainWater", "roadGrip", "windSpeedKmh", "windDirectionDeg" }) do
     local member_value = telemetry_member(sim, name)
     environment_fields[name] = { exists = member_value ~= nil, member_type = type(member_value), value_type = type(telemetry_field(sim, name)) }
   end
@@ -946,11 +1026,13 @@ local function read_live_telemetry()
       -- stores kPa for the calculation and view-model layers.
       pressure_kpa = telemetry_average(pressure_sum, wheel_count) and telemetry_average(pressure_sum, wheel_count) * 6.894757293 or nil,
       optimum_c = telemetry_average(optimum_sum, wheel_count),
+      wheels = wheel_values,
     },
     environment = {
       ambient_c = telemetry_field(sim, "ambientTemperature"),
       road_c = telemetry_field(sim, "roadTemperature"),
       wind_kmh = telemetry_field(sim, "windSpeedKmh"),
+      wind_direction_deg = telemetry_field(sim, "windDirectionDeg"),
       weather_type = telemetry_field(sim, "weatherType"),
       rain_intensity = telemetry_field(sim, "rainIntensity"),
       track_wetness = telemetry_field(sim, "rainWetness"),

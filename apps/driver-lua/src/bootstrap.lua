@@ -177,10 +177,13 @@ function runtime.draw_entry_shell()
     return false
   end
   lifecycle.entry_shell_drawn = true
-  local drew_title = direct_text("AVM PitWall")
+  -- The manifest owns the native title bar and the enhanced renderer owns the
+  -- single custom AVM PitWall header. Do not advance the CSP cursor with a
+  -- second title on successful frames; recovery still has a direct text path.
+  local drew_title = false
   local drew_status = false
   local drew_detail = false
-  if not lifecycle.mode_content_ready and not lifecycle.initialization_attempted then
+  if runtime.app_entry == nil and not lifecycle.mode_content_ready and not lifecycle.initialization_attempted then
     direct_separator()
     drew_status = direct_text("F1 runtime active")
     drew_detail = direct_text("Initialising driver display...")

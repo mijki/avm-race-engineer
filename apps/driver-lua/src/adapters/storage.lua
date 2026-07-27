@@ -11,6 +11,7 @@ local function defaults()
     sound_volume = namespace.config.sound_volume,
     reduced_animation = false,
     scenario = namespace.config.default_scenario,
+    targets = {},
   }
 end
 
@@ -32,6 +33,9 @@ local function valid(value)
     return false
   end
   if type(value.reduced_animation) ~= "boolean" or type(value.scenario) ~= "string" then
+    return false
+  end
+  if value.targets ~= nil and type(value.targets) ~= "table" then
     return false
   end
   return true

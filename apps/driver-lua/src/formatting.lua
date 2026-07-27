@@ -97,6 +97,28 @@ function formatting.mode_label(mode)
   return "COMPACT RACE"
 end
 
+function formatting.cardinal_direction(degrees, fallback)
+  if type(degrees) ~= "number" then return fallback or "Unavailable" end
+  local normalized = degrees % 360
+  local directions = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }
+  local index = math.floor((normalized + 22.5) / 45) % 8 + 1
+  return directions[index]
+end
+
+function formatting.grip(value, fallback)
+  if type(value) ~= "number" then return fallback or "Unavailable" end
+  local normalized = value <= 1 and value * 100 or value
+  return string.format("%.0f%%", math.max(0, math.min(100, normalized)))
+end
+
+function formatting.track_condition(wetness, rain, fallback)
+  if type(wetness) ~= "number" and type(rain) ~= "number" then return fallback or "Unknown" end
+  local amount = math.max(wetness or 0, rain or 0)
+  if amount <= 0.08 then return "Dry" end
+  if amount <= 0.30 then return "Damp" end
+  return "Wet"
+end
+
 function formatting.metric(metric, places, unavailable)
   if type(metric) ~= "table" or metric.value == nil then
     return unavailable or formatting.reason(metric and metric.reason)
@@ -128,15 +150,32 @@ function formatting.reason(reason)
     WET_LAP_EXCLUDED = "Wet lap excluded from model",
     CAUTION_LAP_EXCLUDED = "Caution lap excluded from model",
     REFUEL_TRANSITION = "Refuel transition excluded",
+    PIT_ROUTE_NOT_CONFIGURED = "Pit route addition not configured",
+    TARGET_NOT_CONFIGURED = "Target not configured",
+    USER_CONFIG = "User configured",
+    UNSUPPORTED = "Unsupported by this car/source",
+    CSP_TYRE_WEAR_0_TO_1 = "CSP wear 0..1; displayed as life",
+    CSP_TYRE_GRAIN_UNVERIFIED = "CSP graining scale unverified",
+    CSP_TYRE_BLISTER_UNVERIFIED = "CSP blistering scale unverified",
+    CSP_TYRE_FLATSPOT_UNIT_SCALE = "CSP flat spotting 0..1 reference scale",
   }
   return readable[reason] or (reason and tostring(reason) or "Unavailable")
 end
 
-function formatting.weather_type(value)
+function formatting.weather_type(value, context)
   if value == nil or value == "" then
     return "Unavailable"
   end
-  local text = tostring(value):match("([^%.]+)$") or tostring(value)
+  local raw = tostring(value)
+  if raw:match("^CURRENT%s+%d+") then
+    return formatting.track_condition(context and context.track_wetness, context and context.rain_intensity, "Measured") == "Dry" and "Dry" or "Measured"
+  end
+  local text = raw:match("([^%.]+)$") or raw
+  local numeric = tonumber(text)
+  if numeric ~= nil then
+    local map = { [0] = "Clear", [1] = "Few clouds", [2] = "Cloudy", [3] = "Light rain", [4] = "Heavy rain", [5] = "Storm" }
+    return map[numeric] or "Measured"
+  end
   text = text:gsub("_", " "):lower()
   return text:sub(1, 1):upper() .. text:sub(2)
 end
@@ -155,6 +194,9 @@ function formatting.readable_tyre_state(value)
     OPTIMAL = "In range",
     HOT = "Hot",
     WORN = "Worn",
+    GRAINING = "Graining",
+    BLISTERING = "Blistering",
+    FLAT_SPOTTED = "Flat spotted",
     UNKNOWN = "Unknown",
   }
   return labels[value] or formatting.weather_type(value)

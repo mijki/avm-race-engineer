@@ -93,12 +93,16 @@ class StaticBoundaryTests(unittest.TestCase):
         self.assertTrue(layout_valid(layout_boxes(780, 380, "garage"), 780, 380, "garage"))
 
     def test_compact_geometry_has_three_primary_groups_two_secondary_groups_and_footer(self) -> None:
-        boxes = layout_boxes(800, 408, "compact")
+        boxes = layout_boxes(900, 450, "compact")
         self.assertLess(boxes["fuel"][0] + boxes["fuel"][2], boxes["pace"][0])
         self.assertLess(boxes["pace"][0] + boxes["pace"][2], boxes["pit"][0])
         self.assertLess(boxes["tyres"][1] + boxes["tyres"][3], boxes["engineer"][1])
         self.assertLess(boxes["weather"][0], boxes["engineer"][0] + boxes["engineer"][2])
-        self.assertLessEqual(boxes["engineer"][1] + boxes["engineer"][3], 408)
+        self.assertLessEqual(boxes["engineer"][1] + boxes["engineer"][3], 450)
+
+        medium = layout_boxes(800, 408, "compact")
+        self.assertEqual(medium["pit"][0], medium["fuel"][0])
+        self.assertEqual(medium["pit"][2], medium["weather"][0] + medium["weather"][2] - medium["fuel"][0])
 
     def test_compact_content_columns_and_rows_fit_supported_sizes(self) -> None:
         for width, height in ((700, 300), (800, 408), (900, 450)):
