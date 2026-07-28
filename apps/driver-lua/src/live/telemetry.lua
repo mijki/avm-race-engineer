@@ -8,15 +8,39 @@ do
   local weather = namespace.live.weather
   local calculations = namespace.live.calculations
   local status_builder = namespace.live.status_builder
+  local source_health = namespace.live.source_health
+  local race_events = namespace.live.race_events
   local telemetry = {}
+
+  local function push_bounded(list, value, maximum)
+    if value == nil then return end
+    list[#list + 1] = value
+    while #list > maximum do table.remove(list, 1) end
+  end
+
+  local function health_availability(value)
+    if value == "LIVE" then return "live" end
+    if value == "PARTIAL" then return "partial" end
+    if value == "STALE" then return "stale" end
+    return "unavailable"
+  end
 
   function telemetry.new(config)
     return {
       source_mode = (config and config.default_source_mode) or "live",
       source_availability = "unavailable",
+      source_health = "OFFLINE",
       source_error = nil,
       source_diagnostics = csp.diagnostics(),
+      health_tracker = source_health.new(config),
       latest = nil,
+      sequence = 0,
+      snapshot_history = {},
+      snapshot_history_limit = (config and config.max_recent_snapshots) or 48,
+      event_stream = race_events.new({ max_events = (config and config.max_events) or 128 }),
+      recent_events = {},
+      discontinuities = {},
+      pit_source = {},
       identity = nil,
       lap = lap_tracker.new(),
       stint = stint_tracker.new(),
@@ -43,7 +67,12 @@ do
     if mode ~= "live" and mode ~= "mock" then return false end
     state.source_mode = mode
     state.source_availability = "unavailable"
+    state.source_health = "OFFLINE"
     state.source_error = nil
+    state.health_tracker = source_health.new(namespace.config)
+    state.event_stream = race_events.new({ max_events = namespace.config.max_events or 128 })
+    state.snapshot_history = {}
+    state.recent_events = {}
     if mode == "mock" then csp.set_mock_fixture(mock_fixture) else csp.clear_mock_fixture() end
     return true
   end
@@ -163,12 +192,20 @@ do
     state.source_diagnostics = csp.diagnostics()
     if snapshot == nil then
       state.source_error = reason or "SOURCE_UNAVAILABLE"
+      local health = source_health.update(state.health_tracker, now_s, {
+        source_mode = state.source_mode,
+        usable_core = false,
+        read_ok = false,
+        reason = reason or "SOURCE_UNAVAILABLE",
+      })
+      state.source_health = health
+      state.source_availability = source_health.availability(state.health_tracker)
+      state.source_diagnostics.source_health = health
+      state.source_diagnostics.health = source_health.diagnostics(state.health_tracker)
       if state.latest ~= nil and state.last_valid_s ~= nil then
-        state.source_availability = "stale"
         state.source_diagnostics.update_age_s = math.max(0, now_s - state.last_valid_s)
         derive(state, now_s, config)
       else
-        state.source_availability = "unavailable"
         lap_tracker.reset(state.lap, "SOURCE_RECOVERY")
         stint_tracker.reset(state.stint, "SOURCE_RECOVERY")
         reset_model_history(state, "SOURCE_RECOVERY")
@@ -177,12 +214,44 @@ do
       return state.status
     end
     snapshot.observed_monotonic_s = snapshot.observed_monotonic_s or now_s
+    state.sequence = state.sequence + 1
+    snapshot.sequence = state.sequence
     snapshot = enrich_identity(snapshot)
-    state.source_availability = snapshot.source_availability or "live"
+    local missing_core = snapshot.missing_core or {}
+    local optional_missing = snapshot.optional_missing or {}
+    local health = source_health.update(state.health_tracker, now_s, {
+      source_mode = state.source_mode,
+      usable_core = #missing_core == 0,
+      optional_degraded = #optional_missing > 0,
+      read_ok = true,
+      reason = #missing_core > 0 and "CORE_FIELDS_MISSING" or nil,
+    })
+    state.source_health = health
+    state.source_availability = state.source_mode == "mock" and "mock" or health_availability(health)
+    snapshot.schema_version = "telemetry-snapshot-v1"
+    snapshot.snapshot_id = snapshot.snapshot_id or namespace.contracts.snapshot_id(snapshot.identity, state.sequence)
+    snapshot.source_timestamp_s = snapshot.source_timestamp_s or snapshot.observed_monotonic_s
+    snapshot.source_health = health
+    snapshot.track_layout_key = namespace.contracts.track_layout_key(snapshot.identity)
+    snapshot.availability = snapshot.availability or {}
+    snapshot.failures = snapshot.failures or {}
+    state.source_diagnostics.source_health = health
+    state.source_diagnostics.health = source_health.diagnostics(state.health_tracker)
+    state.source_diagnostics.recent_snapshot_count = #state.snapshot_history + 1
+    push_bounded(state.snapshot_history, namespace.contracts.copy(snapshot), state.snapshot_history_limit)
     state.source_error = nil
-    state.last_valid_s = now_s
+    if #missing_core == 0 then state.last_valid_s = now_s end
     state.source_diagnostics.update_age_s = 0
     local previous = state.latest
+    local events = race_events.update(state.event_stream, snapshot)
+    state.recent_events = events
+    for index = 1, #events do
+      local event = events[index]
+      push_bounded(state.discontinuities, event, config.max_discontinuities or 24)
+      if event.event_type == "RESET" or event.event_type == "TELEPORT" or event.event_type == "SPLINE_JUMP" then
+        state.last_reset_reason = event.rejection_reason or event.event_type
+      end
+    end
     if previous then
       local identity_changed = previous.identity and previous.identity.key ~= snapshot.identity.key
       local lap_decreased = previous.session and snapshot.session and type(previous.session.completed_laps) == "number" and type(snapshot.session.completed_laps) == "number" and snapshot.session.completed_laps < previous.session.completed_laps
@@ -196,6 +265,17 @@ do
     end
     state.latest = snapshot
     state.identity = snapshot.identity
+    state.pit_source = {
+      isInPitlane = snapshot.car and snapshot.car.pit_lane,
+      isInPit = snapshot.car and snapshot.car.pit_box,
+      spline = snapshot.car and snapshot.car.spline,
+      world_position = snapshot.car and snapshot.car.world_position,
+      reset_counter = snapshot.car and snapshot.car.reset_counter,
+      speed_kmh = snapshot.car and snapshot.car.speed_kmh,
+      snapshot_id = snapshot.snapshot_id,
+      observed_monotonic_s = snapshot.observed_monotonic_s,
+      identity_key = namespace.contracts.identity_key(snapshot.identity),
+    }
     local lap_event = lap_tracker.update(state.lap, snapshot)
     stint_tracker.update(state.stint, snapshot, now_s, config.refuel_jump_l)
     if lap_event then
@@ -220,6 +300,14 @@ do
   function telemetry.current_status(state, now_s, config)
     if state.status == nil then return telemetry.update(state, now_s, config) end
     return state.status
+  end
+
+  function telemetry.recent_snapshots(state)
+    return namespace.contracts.copy(state.snapshot_history or {})
+  end
+
+  function telemetry.recent_events(state)
+    return race_events.recent(state.event_stream)
   end
 
   namespace.live.telemetry = telemetry

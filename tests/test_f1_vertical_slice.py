@@ -127,7 +127,7 @@ class ToolingTests(unittest.TestCase):
     def test_build_is_deterministic(self) -> None:
         subprocess.run([sys.executable, "tools/build_f1.py", "--verify-deterministic"], cwd=ROOT, check=True, capture_output=True, text=True)
         manifest = json.loads((ROOT / "apps/driver-lua/dist/AVM_PitWall_F1/build-manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(manifest["module_order"]), 32)
+        self.assertEqual(len(manifest["module_order"]), 33)
         self.assertEqual(manifest["bundle_sha256"], manifest["package_file_hashes"]["AVM_PitWall_F1.lua"])
 
     def test_installer_plan_targets_only_f1(self) -> None:

@@ -518,6 +518,7 @@ namespace.adapters.csp = csp
 local telemetry_fixture = nil
 local live_diagnostics = {
   availability = "unavailable",
+  source_health = "OFFLINE",
   first_failure = nil,
   first_normalization_rejection = nil,
   api = {},
@@ -549,6 +550,8 @@ local telemetry_optional_fields = {
   "car.best_lap_time_s",
   "car.pit_lane",
   "car.pit_box",
+  "car.reset_counter",
+  "car.world_position",
   "tyres.compound",
   "tyres.core_c",
   "tyres.surface_c",
@@ -744,8 +747,12 @@ function csp.normalize(raw, observed_monotonic_s, source_mode)
   local tyres = type(raw.tyres) == "table" and raw.tyres or {}
   local environment = type(raw.environment) == "table" and raw.environment or {}
   local normalized = {
+    schema_version = "telemetry-snapshot-v1",
+    snapshot_id = raw.snapshot_id,
     source_mode = source_mode or raw.source_mode or "live",
+    source_timestamp_s = raw.source_timestamp_s or raw.observed_monotonic_s,
     observed_monotonic_s = observed_monotonic_s,
+    sequence = raw.sequence,
     identity = {
       car_id = identity.car_id,
       track_id = identity.track_id,
@@ -777,6 +784,7 @@ function csp.normalize(raw, observed_monotonic_s, source_mode)
       distance_session_km = car.distance_session_km,
       pit_lane = car.pit_lane,
       pit_box = car.pit_box,
+      world_position = car.world_position,
       lap_time_s = car.lap_time_s,
       previous_lap_time_s = car.previous_lap_time_s,
       best_lap_time_s = car.best_lap_time_s,
@@ -809,12 +817,44 @@ function csp.normalize(raw, observed_monotonic_s, source_mode)
   local availability, missing_core = telemetry_classify(normalized)
   if source_mode == "mock" then
     live_diagnostics.availability = "mock"
+    live_diagnostics.source_health = "LIVE"
     normalized.source_availability = "mock"
+    normalized.source_health = "LIVE"
   else
     normalized.source_availability = availability
+    normalized.source_health = (#missing_core == 0 and #live_diagnostics.optional_missing == 0) and "LIVE" or (#missing_core == 0 and "PARTIAL" or "OFFLINE")
+    live_diagnostics.source_health = normalized.source_health
   end
   normalized.missing_core = missing_core
   normalized.optional_missing = live_diagnostics.optional_missing
+  normalized.availability = {}
+  for index = 1, #telemetry_core_fields do
+    local field = telemetry_core_fields[index]
+    local value = telemetry_path(normalized, field)
+    normalized.availability[field] = {
+      available = telemetry_present(value),
+      unit = field:find("speed") and "km/h" or field:find("fuel") and "L" or field:find("time") and "s" or nil,
+      provenance = telemetry_present(value) and "CSP" or nil,
+      freshness_s = 0,
+      reason = telemetry_present(value) and "MEASURED_CURRENT" or "SOURCE_UNAVAILABLE",
+    }
+  end
+  for index = 1, #telemetry_optional_fields do
+    local field = telemetry_optional_fields[index]
+    local value = telemetry_path(normalized, field)
+    normalized.availability[field] = {
+      available = telemetry_present(value),
+      provenance = telemetry_present(value) and "CSP" or nil,
+      freshness_s = 0,
+      reason = telemetry_present(value) and "MEASURED_CURRENT" or "OPTIONAL_FIELD_UNAVAILABLE",
+    }
+  end
+  normalized.failures = {
+    missing_core = telemetry_finite(#missing_core) and missing_core or {},
+    missing_optional = live_diagnostics.optional_missing,
+    first_failure = live_diagnostics.first_failure,
+    first_normalization_rejection = live_diagnostics.first_normalization_rejection,
+  }
   if #missing_core > 0 then
     normalization_rejection(missing_core[1], telemetry_path(normalized, missing_core[1]), "SOURCE_PARTIAL")
   end
@@ -1009,6 +1049,7 @@ local function read_live_telemetry()
       distance_session_km = telemetry_field(car, "distanceDrivenSessionKm"),
       pit_lane = telemetry_field(car, "isInPitlane"),
       pit_box = telemetry_field(car, "isInPit"),
+      world_position = telemetry_field(car, "position") or telemetry_field(car, "worldPosition"),
       lap_time_s = milliseconds(lap_time_ms),
       previous_lap_time_s = milliseconds(previous_lap_time_ms),
       best_lap_time_s = milliseconds(best_lap_time_ms),

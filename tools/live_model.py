@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from statistics import mean, pstdev
 from typing import Any
 
+from tools.race_engine_core import SCHEMA_VERSIONS, identity_key as race_identity_key, snapshot_id as race_snapshot_id, track_layout_key
+
 
 CORE_FIELDS = (
     "session.elapsed_s",
@@ -46,6 +48,88 @@ OPTIONAL_FIELDS = (
     "environment.track_wetness",
     "environment.standing_water",
 )
+
+TASK2_OPTIONAL_FIELDS = ("car.reset_counter", "car.world_position")
+
+
+@dataclass
+class SourceHealthTracker:
+    """Bounded LIVE/PARTIAL/STALE/OFFLINE transition oracle."""
+
+    stale_after_s: float = 2.0
+    transition_confirmations: int = 2
+    state: str = "OFFLINE"
+    previous_state: str | None = None
+    last_usable_s: float | None = None
+    last_current_s: float | None = None
+    healthy_streak: int = 0
+    failure_streak: int = 0
+    transitions: list[dict[str, Any]] = field(default_factory=list)
+    max_transitions: int = 16
+
+    def _transition(self, next_state: str, reason: str, now_s: float) -> None:
+        if self.state == next_state and self.transitions and self.transitions[-1].get("reason") == reason:
+            return
+        self.previous_state = self.state
+        self.state = next_state
+        self.transitions.append({"from": self.previous_state, "to": next_state, "reason": reason, "at_s": now_s})
+        self.transitions = self.transitions[-self.max_transitions :]
+
+    def update(self, now_s: float, *, usable_core: bool, optional_degraded: bool = False, read_ok: bool = True, reason: str | None = None) -> str:
+        self.last_current_s = now_s
+        if usable_core and read_ok:
+            self.healthy_streak += 1
+            self.failure_streak = 0
+            self.last_usable_s = now_s
+            self._transition("PARTIAL" if optional_degraded else "LIVE", "OPTIONAL_FIELDS_DEGRADED" if optional_degraded else "CORE_FIELDS_RECOVERED", now_s)
+            return self.state
+        self.healthy_streak = 0
+        self.failure_streak += 1
+        age = now_s - self.last_usable_s if self.last_usable_s is not None else None
+        if self.last_usable_s is None:
+            self._transition("OFFLINE", reason or "NO_USABLE_CORE", now_s)
+        elif age is not None and age > self.stale_after_s:
+            self._transition("STALE", reason or "SOURCE_STALE", now_s)
+        elif self.failure_streak >= self.transition_confirmations:
+            self._transition("PARTIAL", reason or "CORE_READ_DEGRADED", now_s)
+        return self.state
+
+    def diagnostics(self) -> dict[str, Any]:
+        return {
+            "state": self.state,
+            "previous_state": self.previous_state,
+            "last_usable_s": self.last_usable_s,
+            "current_age_s": self.last_current_s - self.last_usable_s if self.last_current_s is not None and self.last_usable_s is not None else None,
+            "healthy_streak": self.healthy_streak,
+            "failure_streak": self.failure_streak,
+            "transitions": list(self.transitions),
+        }
+
+
+@dataclass
+class SnapshotHistory:
+    max_count: int = 48
+    snapshots: list[dict[str, Any]] = field(default_factory=list)
+
+    def append(self, snapshot: dict[str, Any]) -> None:
+        self.snapshots.append(snapshot)
+        self.snapshots = self.snapshots[-self.max_count :]
+
+    def recent(self) -> list[dict[str, Any]]:
+        return [dict(snapshot) for snapshot in self.snapshots]
+
+
+def classify_source_health(snapshot: dict[str, Any], *, read_ok: bool = True, stale: bool = False) -> dict[str, Any]:
+    """Task 2 health semantics; legacy ``classify_source`` remains compatible."""
+    result = classify_source(snapshot, stale=stale)
+    result["runtime_optional_missing"] = [field for field in TASK2_OPTIONAL_FIELDS if not _present(_path(snapshot, field))]
+    if not read_ok:
+        result["source_health"] = "STALE" if stale else "OFFLINE"
+    elif result["core_valid"]:
+        result["source_health"] = "PARTIAL" if result["optional_missing"] or result["runtime_optional_missing"] else "LIVE"
+    else:
+        result["source_health"] = "OFFLINE"
+    return result
 
 
 def _path(snapshot: dict[str, Any], field: str) -> Any:
@@ -93,8 +177,12 @@ def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") 
     tyres = section("tyres")
     environment = section("environment")
     snapshot = {
+        "schema_version": SCHEMA_VERSIONS["telemetry_snapshot"],
+        "snapshot_id": raw.get("snapshot_id") or race_snapshot_id(identity, int(raw.get("sequence") or 0)),
         "source_mode": source_mode,
         "observed_monotonic_s": now_s,
+        "source_timestamp_s": raw.get("source_timestamp_s", now_s),
+        "sequence": int(raw.get("sequence") or 0),
         "identity": {key: identity.get(key) for key in ("car_id", "track_id", "layout_id", "driver_name", "session_id", "configuration_id")},
         "session": {key: session.get(key) for key in ("type", "elapsed_s", "remaining_s", "lap_limit", "completed_laps", "current_lap", "position", "total_cars", "track_length_m", "paused", "replay", "active", "finished")},
         "car": {key: car.get(key) for key in ("speed_kmh", "fuel_l", "fuel_capacity_l", "spline", "distance_session_km", "pit_lane", "pit_box", "lap_time_s", "previous_lap_time_s", "best_lap_time_s", "lap_valid", "previous_lap_valid", "last_lap_cuts", "reset_counter")},
@@ -103,8 +191,12 @@ def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") 
     }
     snapshot["source_availability"] = "mock" if source_mode == "mock" else classify_source(snapshot)["availability"]
     source = classify_source(snapshot)
+    snapshot["source_health"] = "LIVE" if source_mode == "mock" else ("PARTIAL" if source["core_valid"] and source["optional_missing"] else "LIVE" if source["core_valid"] else "OFFLINE")
+    snapshot["track_layout_key"] = track_layout_key(snapshot["identity"])
     snapshot["missing_core"] = source["missing_core"]
     snapshot["optional_missing"] = source["optional_missing"]
+    snapshot["availability"] = {field: {"available": _present(_path(snapshot, field)), "provenance": "fixture" if _present(_path(snapshot, field)) else None, "reason": "MEASURED_CURRENT" if _present(_path(snapshot, field)) else "SOURCE_UNAVAILABLE"} for field in CORE_FIELDS + OPTIONAL_FIELDS + TASK2_OPTIONAL_FIELDS}
+    snapshot["failures"] = {"missing_core": source["missing_core"], "missing_optional": source["optional_missing"]}
     return snapshot
 
 
