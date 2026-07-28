@@ -1,6 +1,6 @@
 # AVM PitWall
 
-Status: `Planned`
+Status: `F1 runtime and F2 live slice host-implemented; real CSP validation pending`
 
 AVM PitWall is the compact in-car CSP Lua client. It is the driver-facing AVM
 surface and therefore carries the strictest safety constraints.
@@ -16,15 +16,74 @@ surface and therefore carries the strictest safety constraints.
 - Keep a useful limited local view when the Driver Bridge or Relay Server is
   unavailable.
 
-## Proposed implementation boundary
+## F1 implementation boundary
 
-- CSP Lua app maintained as small development modules.
-- Deterministic build-time bundling into one generated CSP-compatible entry
-  file; the shipped path uses neither runtime `require` nor `dofile`.
-- CSP calls isolated behind an adapter; fuel, pace, stint, pit, and trend
-  calculations remain pure domain logic.
-- The generated bundle is validated, never hand-edited, and must pass a real
-  Assetto Corsa/CSP gate before a driver-client phase closes.
+- CSP Lua app is maintained as small source modules under `src/` and bundled in
+  an explicit dependency order from `build/module-manifest.json`.
+- The generated package contains one canonical runtime bundle,
+  `AVM_PitWall_F1.lua`, no runtime `require` or
+  `dofile`, four deterministic WAV tones, an asset manifest, and a build hash
+  manifest. Generated files are ignored and recreated by the build.
+- CSP calls, audio, and presentation storage are isolated behind
+  `src/adapters/`; the first-frame native canary and recovery renderer use only
+  documented direct CSP UI calls. Contracts, formatting, view-model reduction,
+  alert state, and layout selection remain host-testable. The first bundle
+  module registers both `script.windowMain(dt)` and the manifest-requested
+  global `windowMain(dt)` before later modules initialize.
+- The CSP adapter accepts the LuaJIT `cdata` callable shape used by the
+  installed runtime for UI members such as `ui.windowSize` and
+  `ui.availableSpace`; all live reads remain protected and normalized at the
+  adapter boundary.
+- The shell has exactly three modes: Compact Race, Expanded Race, and
+  Garage/Diagnostics. Race modes are fixed single-screen compositions with no
+  scrolling child UI.
+- F1 contract fixtures remain deterministic and host-testable. The F2 slice
+  adds local CSP telemetry normalization and bounded calculations without
+  networking, production weather or strategy calculation, setup application,
+  or arbitrary numeric editing.
+- The host gate covers the bundled-runtime correction, including callback timing
+  and forced stage hooks. A real in-game CSP callback/render gate remains
+  explicitly pending and is not represented as passed by host tests.
+
+## Build and validate
+
+From the repository root:
+
+```text
+python tools/f1_fixture_builder.py
+python tools/build_f1.py --verify-deterministic
+python -m unittest discover -s tests -p "test_f1_*.py" -q
+```
+
+The generated development package is written to
+`apps/driver-lua/dist/AVM_PitWall_F1/` and is not hand-edited. The package
+contains `manifest.ini`, `AVM_PitWall_F1.lua`, `README.md`,
+`asset-manifest.json`, `build-manifest.json`, and `assets/sounds/`.
+`AVM_PitWall_F1.lua` is the folder-matching CSP entry and exports
+`script.windowMain(dt)` for `FUNCTION_MAIN = windowMain`.
+
+## Fixture scenarios
+
+The garage fixture catalog covers normal, fuel, pace, pit, weather provenance,
+confidence, unavailable, malformed, traffic, setup, and replan states. The
+catalog is in `fixtures/f1-scenario-catalog.json`; contract-shaped examples
+are in `fixtures/contracts/`. `MALFORMED_SNAPSHOT` is intentionally a Lua-only
+invalid envelope used to exercise the visible fallback shell.
+
+## Safe development install
+
+The installer is dry-run by default and requires an explicit Assetto Corsa
+root. It targets only `apps/lua/AVM_PitWall_F1`, never the installed V1
+`AVM_PitWall` directory:
+
+```text
+python tools/f1_installer.py --ac-root "E:\Games\Steam\steamapps\common\assettocorsa"
+python tools/f1_installer.py --ac-root "E:\Games\Steam\steamapps\common\assettocorsa" --apply
+```
+
+Use `--apply` only after reviewing the dry-run allowlist. The installer stages
+and hash-checks the package, preserves unrelated target files, and keeps a
+rollback backup outside the application target.
 
 ## Must Preserve From V1
 
@@ -42,3 +101,25 @@ surface and therefore carries the strictest safety constraints.
 
 See [docs/ux/driver-client-ux.md](../../docs/ux/driver-client-ux.md) and
 [docs/architecture/lua-source-and-build-architecture.md](../../docs/architecture/lua-source-and-build-architecture.md).
+
+## F2 live-driver implementation
+
+Status: host-implemented; real CSP validation pending.
+
+The default source is LIVE CSP telemetry through `src/adapters/csp.lua`.
+Normalized state flows through identity, lap, stint, bounded sample, weather,
+track-model, and pure local-calculation modules into one driver-status view
+model. The local calculation model is explicitly temporary and
+non-authoritative; Driver Bridge remains the planned production owner.
+
+MOCK is available only from Garage diagnostics. LIVE reports `LIVE`, `PARTIAL`,
+`STALE`, or `OFFLINE` availability in the race shell; malformed or unavailable
+LIVE data enters recovery and never becomes mock data. The adapter records one
+startup probe and one first-normalization rejection for Garage diagnostics,
+while race renderers show only readable source state and unavailable text.
+
+The Compact layout is a bounded single-screen composition: a source-labelled
+header, three primary FUEL/PACE/PIT cards, two secondary TYRES/WEATHER cards,
+and an ENGINEER status footer. Host geometry checks cover the observed CSP
+window sizes 700x300, 800x408, and 900x450; interactive validation is still
+pending.

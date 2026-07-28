@@ -1,0 +1,35 @@
+{
+  "calculated_at_utc": "2026-07-26T18:00:00Z",
+  "components": [
+    {
+      "dimension": "sample_quantity",
+      "rationale": "Representative laps are available.",
+      "score": 0.9,
+      "status": "ok",
+      "weight": 0.2
+    },
+    {
+      "dimension": "weather_stability",
+      "rationale": "Current dry conditions are stable.",
+      "score": 0.95,
+      "status": "ok",
+      "weight": 0.15
+    },
+    {
+      "dimension": "identity_validity",
+      "rationale": "Session, car, track, and strategy match.",
+      "score": 1.0,
+      "status": "ok",
+      "weight": 0.2
+    }
+  ],
+  "confidence_id": "confidence-f1-normal-001",
+  "freshness_state": "live",
+  "overall_band": "high",
+  "overall_score": 0.92,
+  "reason_codes": [],
+  "schema_version": "0.1.0",
+  "subject_id": "forecast-f1-normal-001",
+  "subject_type": "forecast_snapshot",
+  "ui_summary": "High confidence: live samples and stable dry conditions."
+}

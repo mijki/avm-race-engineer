@@ -1,0 +1,47 @@
+{
+  "capture_time_monotonic_ms": 1080000,
+  "capture_time_utc": "2026-07-26T18:00:00Z",
+  "car_id": "car-avm-demo",
+  "conditions": {
+    "ambient_temperature_c": 24.0,
+    "humidity_0_to_1": 0.46,
+    "precipitation_type": "none",
+    "pressure_pa": 101325.0,
+    "rain_intensity_0_to_1": 0.0,
+    "road_temperature_c": 31.0,
+    "standing_water_0_to_1": 0.0,
+    "track_grip_0_to_1": 0.92,
+    "track_wetness_0_to_1": 0.0,
+    "weather_type": "Dry",
+    "wind_direction_degrees": 180.0,
+    "wind_speed_mps": 2.4
+  },
+  "confidence": {
+    "overall_band": "high",
+    "overall_score": 0.92
+  },
+  "current_to_next_transition": null,
+  "freshness": {
+    "age_ms": 120,
+    "state": "live",
+    "valid_until_utc": "2026-07-26T18:00:05Z"
+  },
+  "layout_id": "layout-f1-demo",
+  "measurement_id": "measurement-f1-dry-001",
+  "reason_codes": [
+    "WEATHER_CURRENT_ONLY"
+  ],
+  "schema_version": "0.1.0",
+  "sequence": {
+    "sequence_number": 42,
+    "stream_id": "weather-f1"
+  },
+  "session_id": "session-f1-demo",
+  "source_attribution": {
+    "component": "driver_bridge_fixture",
+    "origin": "replayed",
+    "source_id": "fixture:f1-dry",
+    "source_type": "shared_memory"
+  },
+  "track_id": "track-f1-demo"
+}

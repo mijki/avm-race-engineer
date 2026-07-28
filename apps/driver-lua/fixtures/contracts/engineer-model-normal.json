@@ -1,0 +1,87 @@
+{
+  "accepted_strategy_summary": {
+    "reserve_target_l": 2.0,
+    "strategy_id": "strategy-f1-demo",
+    "strategy_revision": "accepted-r3",
+    "target_fuel_per_lap_l": 2.38,
+    "target_pit_lap": 25,
+    "target_stint_laps": 18
+  },
+  "alternative_scenarios": [],
+  "baseline_plan_summary": {
+    "reserve_target_l": 2.0,
+    "strategy_id": "strategy-f1-demo",
+    "strategy_revision": "baseline-r1",
+    "target_fuel_per_lap_l": 2.38,
+    "target_pit_lap": 25,
+    "target_stint_laps": 18
+  },
+  "car_id": "car-avm-demo",
+  "confidence_rollup": {
+    "overall_band": "high",
+    "overall_score": 0.92
+  },
+  "derived_layer": {
+    "calculated_race_state_id": "state-f1-normal-001",
+    "distance_to_pit_entry_m": 2120.0,
+    "fuel_delta_to_plan_l": 1.2,
+    "fuel_laps_remaining": 6.4,
+    "weather_trend": "stable"
+  },
+  "driver_accepted_strategy_summary": null,
+  "driver_id": "driver-demo",
+  "explanations": [
+    {
+      "calculation_key": "predicted_fuel_at_pit_entry_l",
+      "explanation_id": "explanation-f1-fuel-001",
+      "summary": "Projected fuel retains the planned reserve."
+    }
+  ],
+  "forecast_layer": {
+    "forecast_snapshot_id": "forecast-f1-normal-001",
+    "optimal_pit_lap": 25,
+    "predicted_fuel_at_pit_entry_l": 13.9,
+    "projected_race_end_fuel_l": 5.2,
+    "strategy_feasibility": "feasible"
+  },
+  "generated_at_utc": "2026-07-26T18:00:00Z",
+  "layout_id": "layout-f1-demo",
+  "measured_layer": {
+    "selected_values": {
+      "ambient_temperature_c": 24.0,
+      "current_fuel_l": 18.7,
+      "lap_number": 18,
+      "normalized_track_position": 0.52,
+      "pit_state": "on_track",
+      "rain_intensity_0_to_1": 0.0,
+      "road_temperature_c": 31.0,
+      "track_wetness_0_to_1": 0.0,
+      "traffic_state": "clear"
+    },
+    "telemetry_refs": [
+      "telemetry-f1-001"
+    ],
+    "weather_measurement_id": "measurement-f1-dry-001"
+  },
+  "proposed_strategy_summary": null,
+  "reason_codes": [],
+  "recommendation_layer": {
+    "alternative_calls": [
+      "box_in_n_laps"
+    ],
+    "primary_call": "on_plan",
+    "status": "advisory"
+  },
+  "schema_version": "0.1.0",
+  "session_id": "session-f1-demo",
+  "snapshot_id": "engineer-f1-normal-001",
+  "track_id": "track-f1-demo",
+  "weather_forecast": {
+    "label": "ESTIMATED",
+    "snapshot_id": "weather-f1-estimated-001"
+  },
+  "weather_measurement": {
+    "label": "CURRENT",
+    "snapshot_id": "measurement-f1-dry-001"
+  }
+}

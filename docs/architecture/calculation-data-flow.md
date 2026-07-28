@@ -238,3 +238,18 @@ Operators and support tooling should be able to inspect:
 - Exact transport framing for the snapshot payloads.
 - Persistence table schemas.
 - Browser chart layout and interaction design.
+
+## F2 Local Driver Slice
+
+Until Driver Bridge exists, apps/driver-lua implements a deliberately bounded
+local input path for the driver experience only.
+
+Flow: CSP telemetry -> normalized snapshot -> identity/lap/stint -> bounded
+samples -> local non-authoritative calculations -> driver status view model ->
+AVM PitWall modes.
+
+The source adapter reads only documented own-car/session state and current
+weather. The local model returns unavailable metrics with reason, sample count,
+confidence, and freshness when evidence is insufficient. It never produces a
+future weather ETA or probability. Driver Bridge remains the planned
+authoritative owner; see [Local Live Telemetry Fallback](local-live-telemetry-fallback.md).

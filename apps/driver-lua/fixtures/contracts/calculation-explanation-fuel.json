@@ -1,0 +1,48 @@
+{
+  "assumptions": [
+    {
+      "assumption_id": "assumption-f1-dry",
+      "details": null,
+      "label": "Dry running continues",
+      "status": "active"
+    }
+  ],
+  "based_on_sample_set_id": "samples-f1-qualifying-02",
+  "based_on_strategy_revision": "accepted-r3",
+  "calculation_key": "predicted_fuel_at_pit_entry_l",
+  "confidence_summary": {
+    "overall_band": "high",
+    "overall_score": 0.92
+  },
+  "evidence": [
+    {
+      "capture_time_utc": "2026-07-26T18:00:00Z",
+      "field_path": "fuel_l",
+      "source_id": "telemetry-f1-001",
+      "source_type": "telemetry_envelope"
+    }
+  ],
+  "explanation_id": "explanation-f1-fuel-001",
+  "generated_at_utc": "2026-07-26T18:00:00Z",
+  "narrative_steps": [
+    "Use representative fuel rate.",
+    "Apply distance to pit entry.",
+    "Compare with accepted plan."
+  ],
+  "operator_notes": null,
+  "primary_reason_codes": [
+    "FUEL_MODEL_ESTIMATED"
+  ],
+  "schema_version": "0.1.0",
+  "subject_id": "state-f1-normal-001",
+  "subject_type": "calculated_race_state",
+  "summary": "Projected fuel at pit entry retains the planned reserve.",
+  "uncertainty_summary": [
+    {
+      "field_name": "predicted_fuel_at_pit_entry_l",
+      "lower_bound": 13.4,
+      "unit": "L",
+      "upper_bound": 14.3
+    }
+  ]
+}

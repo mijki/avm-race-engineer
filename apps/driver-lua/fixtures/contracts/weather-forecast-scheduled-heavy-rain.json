@@ -1,0 +1,255 @@
+{
+  "confidence": {
+    "overall_band": "high",
+    "overall_score": 0.92
+  },
+  "display_bucket_minutes": 5,
+  "forecast_id": "weather-f1-scheduled-001",
+  "generated_at_utc": "2026-07-26T18:00:00Z",
+  "layout_id": "layout-f1-demo",
+  "points": [
+    {
+      "ambient_temperature_c": 24.0,
+      "authoritative": false,
+      "bucket_end_utc": "2026-07-26T18:05:00Z",
+      "bucket_start_utc": "2026-07-26T18:00:00Z",
+      "confidence": {
+        "overall_band": "high",
+        "overall_score": 0.94
+      },
+      "forecast_time_utc": "2026-07-26T18:00:00Z",
+      "generated_at_utc": "2026-07-26T18:00:00Z",
+      "horizon_minutes": 0,
+      "humidity_0_to_1": 0.46,
+      "interpolated": false,
+      "precipitation_type": "none",
+      "pressure_pa": 101325.0,
+      "rain_intensity_0_to_1": 0.0,
+      "rain_probability_0_to_1": null,
+      "reason_codes": [
+        "WEATHER_CURRENT_ONLY"
+      ],
+      "road_temperature_c": 31.0,
+      "source_age_ms": 120,
+      "source_id": "weather-f1-scheduled-001",
+      "source_type": "measured_current",
+      "standing_water_0_to_1": 0.0,
+      "track_grip_0_to_1": 0.92,
+      "track_wetness_0_to_1": 0.0,
+      "uncertainty": {},
+      "weather_type": "Dry",
+      "wind_direction_degrees": 180.0,
+      "wind_speed_mps": 2.4
+    },
+    {
+      "ambient_temperature_c": 22.0,
+      "authoritative": true,
+      "bucket_end_utc": "2026-07-26T18:10:00Z",
+      "bucket_start_utc": "2026-07-26T18:05:00Z",
+      "confidence": {
+        "overall_band": "high",
+        "overall_score": 0.94
+      },
+      "forecast_time_utc": "2026-07-26T18:05:00Z",
+      "generated_at_utc": "2026-07-26T18:00:00Z",
+      "horizon_minutes": 5,
+      "humidity_0_to_1": null,
+      "interpolated": false,
+      "precipitation_type": "none",
+      "pressure_pa": null,
+      "rain_intensity_0_to_1": 0.0,
+      "rain_probability_0_to_1": null,
+      "reason_codes": [
+        "WEATHER_SCHEDULE_AUTHORITATIVE"
+      ],
+      "road_temperature_c": 26.0,
+      "source_age_ms": 0,
+      "source_id": "weather-f1-scheduled-001",
+      "source_type": "controller_schedule",
+      "standing_water_0_to_1": 0.38,
+      "track_grip_0_to_1": null,
+      "track_wetness_0_to_1": 0.0,
+      "uncertainty": {},
+      "weather_type": "Dry",
+      "wind_direction_degrees": null,
+      "wind_speed_mps": null
+    },
+    {
+      "ambient_temperature_c": 22.0,
+      "authoritative": true,
+      "bucket_end_utc": "2026-07-26T18:15:00Z",
+      "bucket_start_utc": "2026-07-26T18:10:00Z",
+      "confidence": {
+        "overall_band": "high",
+        "overall_score": 0.94
+      },
+      "forecast_time_utc": "2026-07-26T18:10:00Z",
+      "generated_at_utc": "2026-07-26T18:00:00Z",
+      "horizon_minutes": 10,
+      "humidity_0_to_1": null,
+      "interpolated": false,
+      "precipitation_type": "rain",
+      "pressure_pa": null,
+      "rain_intensity_0_to_1": 0.8,
+      "rain_probability_0_to_1": null,
+      "reason_codes": [
+        "WEATHER_SCHEDULE_AUTHORITATIVE"
+      ],
+      "road_temperature_c": 26.0,
+      "source_age_ms": 0,
+      "source_id": "weather-f1-scheduled-001",
+      "source_type": "controller_schedule",
+      "standing_water_0_to_1": 0.38,
+      "track_grip_0_to_1": null,
+      "track_wetness_0_to_1": 0.72,
+      "uncertainty": {},
+      "weather_type": "Heavy rain",
+      "wind_direction_degrees": null,
+      "wind_speed_mps": null
+    },
+    {
+      "ambient_temperature_c": 22.0,
+      "authoritative": true,
+      "bucket_end_utc": "2026-07-26T18:20:00Z",
+      "bucket_start_utc": "2026-07-26T18:15:00Z",
+      "confidence": {
+        "overall_band": "high",
+        "overall_score": 0.94
+      },
+      "forecast_time_utc": "2026-07-26T18:15:00Z",
+      "generated_at_utc": "2026-07-26T18:00:00Z",
+      "horizon_minutes": 15,
+      "humidity_0_to_1": null,
+      "interpolated": false,
+      "precipitation_type": "rain",
+      "pressure_pa": null,
+      "rain_intensity_0_to_1": 0.8,
+      "rain_probability_0_to_1": null,
+      "reason_codes": [
+        "WEATHER_SCHEDULE_AUTHORITATIVE"
+      ],
+      "road_temperature_c": 26.0,
+      "source_age_ms": 0,
+      "source_id": "weather-f1-scheduled-001",
+      "source_type": "controller_schedule",
+      "standing_water_0_to_1": 0.38,
+      "track_grip_0_to_1": null,
+      "track_wetness_0_to_1": 0.72,
+      "uncertainty": {},
+      "weather_type": "Heavy rain",
+      "wind_direction_degrees": null,
+      "wind_speed_mps": null
+    },
+    {
+      "ambient_temperature_c": 22.0,
+      "authoritative": true,
+      "bucket_end_utc": "2026-07-26T18:25:00Z",
+      "bucket_start_utc": "2026-07-26T18:20:00Z",
+      "confidence": {
+        "overall_band": "high",
+        "overall_score": 0.94
+      },
+      "forecast_time_utc": "2026-07-26T18:20:00Z",
+      "generated_at_utc": "2026-07-26T18:00:00Z",
+      "horizon_minutes": 20,
+      "humidity_0_to_1": null,
+      "interpolated": false,
+      "precipitation_type": "rain",
+      "pressure_pa": null,
+      "rain_intensity_0_to_1": 0.8,
+      "rain_probability_0_to_1": null,
+      "reason_codes": [
+        "WEATHER_SCHEDULE_AUTHORITATIVE"
+      ],
+      "road_temperature_c": 26.0,
+      "source_age_ms": 0,
+      "source_id": "weather-f1-scheduled-001",
+      "source_type": "controller_schedule",
+      "standing_water_0_to_1": 0.38,
+      "track_grip_0_to_1": null,
+      "track_wetness_0_to_1": 0.72,
+      "uncertainty": {},
+      "weather_type": "Heavy rain",
+      "wind_direction_degrees": null,
+      "wind_speed_mps": null
+    },
+    {
+      "ambient_temperature_c": 22.0,
+      "authoritative": true,
+      "bucket_end_utc": "2026-07-26T18:30:00Z",
+      "bucket_start_utc": "2026-07-26T18:25:00Z",
+      "confidence": {
+        "overall_band": "high",
+        "overall_score": 0.94
+      },
+      "forecast_time_utc": "2026-07-26T18:25:00Z",
+      "generated_at_utc": "2026-07-26T18:00:00Z",
+      "horizon_minutes": 25,
+      "humidity_0_to_1": null,
+      "interpolated": false,
+      "precipitation_type": "rain",
+      "pressure_pa": null,
+      "rain_intensity_0_to_1": 0.8,
+      "rain_probability_0_to_1": null,
+      "reason_codes": [
+        "WEATHER_SCHEDULE_AUTHORITATIVE"
+      ],
+      "road_temperature_c": 26.0,
+      "source_age_ms": 0,
+      "source_id": "weather-f1-scheduled-001",
+      "source_type": "controller_schedule",
+      "standing_water_0_to_1": 0.38,
+      "track_grip_0_to_1": null,
+      "track_wetness_0_to_1": 0.72,
+      "uncertainty": {},
+      "weather_type": "Heavy rain",
+      "wind_direction_degrees": null,
+      "wind_speed_mps": null
+    },
+    {
+      "ambient_temperature_c": 22.0,
+      "authoritative": true,
+      "bucket_end_utc": "2026-07-26T18:35:00Z",
+      "bucket_start_utc": "2026-07-26T18:30:00Z",
+      "confidence": {
+        "overall_band": "high",
+        "overall_score": 0.94
+      },
+      "forecast_time_utc": "2026-07-26T18:30:00Z",
+      "generated_at_utc": "2026-07-26T18:00:00Z",
+      "horizon_minutes": 30,
+      "humidity_0_to_1": null,
+      "interpolated": false,
+      "precipitation_type": "rain",
+      "pressure_pa": null,
+      "rain_intensity_0_to_1": 0.8,
+      "rain_probability_0_to_1": null,
+      "reason_codes": [
+        "WEATHER_SCHEDULE_AUTHORITATIVE"
+      ],
+      "road_temperature_c": 26.0,
+      "source_age_ms": 0,
+      "source_id": "weather-f1-scheduled-001",
+      "source_type": "controller_schedule",
+      "standing_water_0_to_1": 0.38,
+      "track_grip_0_to_1": null,
+      "track_wetness_0_to_1": 0.72,
+      "uncertainty": {},
+      "weather_type": "Heavy rain",
+      "wind_direction_degrees": null,
+      "wind_speed_mps": null
+    }
+  ],
+  "reason_codes": [
+    "WEATHER_SCHEDULE_AUTHORITATIVE"
+  ],
+  "schema_version": "0.1.0",
+  "session_id": "session-f1-demo",
+  "source_summary": {
+    "authoritative": true,
+    "source_id": "weather-f1-scheduled-001",
+    "source_type": "controller_schedule"
+  },
+  "timeline_status": "scheduled",
+  "track_id": "track-f1-demo"
+}
