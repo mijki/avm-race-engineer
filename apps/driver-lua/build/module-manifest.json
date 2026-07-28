@@ -17,6 +17,7 @@
     {"id": "alert_state", "source": "src/alert_state.lua", "depends_on": ["config", "formatting"]},
     {"id": "mock_scenarios", "source": "src/mock_scenarios.lua", "depends_on": ["config"]},
     {"id": "live.track_model", "source": "src/live/track_model.lua", "depends_on": ["contracts"]},
+    {"id": "live.race_events", "source": "src/live/race_events.lua", "depends_on": ["contracts"]},
     {"id": "live.session_identity", "source": "src/live/session_identity.lua", "depends_on": ["bootstrap"]},
     {"id": "live.sample_store", "source": "src/live/sample_store.lua", "depends_on": ["bootstrap"]},
     {"id": "live.lap_tracker", "source": "src/live/lap_tracker.lua", "depends_on": ["live.session_identity"]},
