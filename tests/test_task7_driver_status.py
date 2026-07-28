@@ -63,7 +63,7 @@ def snapshot(*, current_lap: int = 3, completed_laps: int | None = None, pit_lan
 
 def state(*, target: bool = True, excluded_latest: bool = False, empty_post_pit: bool = False):
     laps = [lap(1), lap(2, pace=not excluded_latest, fuel_ok=not excluded_latest)]
-    events = [{"event_type": "PIT_EXIT_CONFIRMED", "event_id": "pit-exit", "detection_time_s": 250}] if empty_post_pit else []
+    events = [{"event_type": "PIT_SERVICE_STOP_CONFIRMED", "event_id": "pit-service", "detection_time_s": 250, "payload": {"classification": "SERVICE_STOP"}}] if empty_post_pit else []
     snap = snapshot(current_lap=3)
     calc = StintCalculationEngine({"active_regime": "DRY", "pace_target_s": 92 if target else None, "fuel_target_l": 2.4, "now_s": 300}).calculate(laps, events, current_snapshot=snap)
     forecast = ForecastEngine({"race_lap_limit": 40, "track_length_m": 5000, "reserve_fuel_l": 2, "planned_pit_lap": 10, "now_s": 300, "pit_marker": {"state": "CONFIRMED", "entry_spline": 0.1}}).calculate(calc, current_snapshot=snap, pit_diagnostics={"marker": {"state": "CONFIRMED", "entry_spline": 0.1}})

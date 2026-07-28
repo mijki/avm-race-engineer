@@ -246,7 +246,7 @@ def _extract_evidence(lap: Mapping[str, Any], events: Iterable[Mapping[str, Any]
 
     pit = bool(_first(interaction, "pit", "pit_lane", "pit_lane_interaction", "pit_box", "in_pit", "in_lap", "out_lap"))
     pit = pit or bool(classification_values & {"PIT", "PIT_LAP", "PIT_IN", "PIT_OUT", "IN_LAP", "OUT_LAP", "PIT_BOX"})
-    pit = pit or bool(event_tokens & {"PIT_ENTRY_CANDIDATE", "PIT_ENTRY_CONFIRMED", "PIT_BOX_ARRIVAL", "PIT_BOX_DEPARTURE", "PIT_EXIT_CANDIDATE", "PIT_EXIT_CONFIRMED"})
+    pit = pit or bool(event_tokens & {"PIT_ENTRY_CANDIDATE", "PIT_ENTRY_CONFIRMED", "PIT_BOX_ARRIVAL", "PIT_BOX_DEPARTURE", "PIT_EXIT_CANDIDATE", "PIT_EXIT_CONFIRMED", "PIT_SERVICE_STOP_CONFIRMED"})
     pit_box = bool(_first(interaction, "pit_box", "in_pit_box")) or bool(classification_values & {"PIT_BOX"})
     reset = bool(_first(interaction, "reset", "reset_interaction", "reset_counter_changed")) or "RESET" in event_tokens
     teleport = bool(_first(interaction, "teleport", "teleport_interaction")) or "TELEPORT" in event_tokens

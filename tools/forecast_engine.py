@@ -228,7 +228,7 @@ def _invalidation_reasons(events: Iterable[Mapping[str, Any]], previous: Mapping
             reasons.append(token)
         elif token == "LAP_COMPLETED":
             reasons.append("NEW_COMPLETED_LAP")
-        elif token in {"PIT_ENTRY_CANDIDATE", "PIT_ENTRY_CONFIRMED", "REFUEL", "PIT_EXIT_CONFIRMED"}:
+        elif token in {"PIT_ENTRY_CANDIDATE", "PIT_ENTRY_CONFIRMED", "REFUEL", "PIT_EXIT_CONFIRMED", "PIT_SERVICE_STOP_CONFIRMED", "MANUAL_NEW_STINT_CONFIRMED"}:
             reasons.append("PIT_STATE_CHANGED")
         elif token in {"PIT_MARKER_UPDATED", "MARKER_UPDATED"}:
             reasons.append("MARKER_UPDATED")

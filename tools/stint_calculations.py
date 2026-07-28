@@ -208,10 +208,9 @@ def _boundary_reason(event: Mapping[str, Any], config: StintCalculationConfig) -
     payload = _mapping(event.get("payload"))
     if kind in {"STINT_STARTED", "DRIVER_DEFINED_STINT_START", "STINT_BOUNDARY", "SESSION_RESTART", "RESTART"}:
         return "EXPLICIT_STINT_BOUNDARY"
-    if kind == "PIT_EXIT_CONFIRMED":
-        return "PIT_CYCLE_EXIT"
-    if kind == "REFUEL" and (_number(_first(payload, "delta_l", "refuel_l", "amount_l")) or 0.0) >= config.refuel_boundary_l:
-        return "MATERIAL_REFUEL"
+    classification = _first(payload, "classification", "pit_visit_classification") or event.get("classification")
+    if kind in {"PIT_SERVICE_STOP_CONFIRMED", "MANUAL_NEW_STINT_CONFIRMED"} or classification == "SERVICE_STOP":
+        return "SERVICE_STOP"
     if kind in {"COMPOUND_CHANGED", "TYRE_COMPOUND_CHANGED", "TYRE_SET_CHANGED"}:
         return "TYRE_CHANGE"
     return None
@@ -237,19 +236,7 @@ def _boundaries(events: Iterable[Mapping[str, Any]], config: StintCalculationCon
             event_time,
         ))
     result.sort(key=lambda boundary: boundary.sort_key)
-    pit_exit_times = [boundary.event_time_s for boundary in result if boundary.reason == "PIT_CYCLE_EXIT" and boundary.event_time_s is not None]
-    # A material refuel observed during a pit cycle and its later pit exit are
-    # one stint boundary, unless the producer supplied an explicit boundary
-    # event. Refuel-only evidence still creates a boundary.
-    return [
-        boundary
-        for boundary in result
-        if not (
-            boundary.reason == "MATERIAL_REFUEL"
-            and boundary.event_time_s is not None
-            and any(exit_time >= boundary.event_time_s for exit_time in pit_exit_times)
-        )
-    ]
+    return result
 
 
 def _compound(lap: Mapping[str, Any]) -> str | None:

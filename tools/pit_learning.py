@@ -11,6 +11,8 @@ from tools.race_engine_core import SCHEMA_VERSIONS, identity_key, pit_marker, pi
 
 
 STATES = ("ON_TRACK", "ENTRY_CANDIDATE", "IN_PIT_LANE", "AT_PIT_BOX", "LEAVING_PIT_BOX", "EXIT_CANDIDATE", "BACK_ON_TRACK", "RESET_SUPPRESSED")
+PIT_VISIT_CLASSIFICATIONS = frozenset(("DRIVE_THROUGH", "STOP_GO", "SERVICE_STOP", "UNKNOWN_STOP"))
+_CONFIRMED_VALUES = frozenset(("CONFIRMED", "COMPLETE", "COMPLETED", "DONE", "APPLIED", "VERIFIED", "TRUE"))
 
 
 def _car(snapshot: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -21,6 +23,96 @@ def _car(snapshot: Mapping[str, Any] | None) -> Mapping[str, Any]:
 def _session(snapshot: Mapping[str, Any] | None) -> Mapping[str, Any]:
     value = snapshot.get("session", {}) if isinstance(snapshot, Mapping) else {}
     return value if isinstance(value, Mapping) else {}
+
+
+def _pit_lane(snapshot: Mapping[str, Any] | None) -> bool:
+    car = _car(snapshot)
+    return car.get("pit_lane") is True or car.get("isInPitlane") is True
+
+
+def _pit_box(snapshot: Mapping[str, Any] | None) -> bool:
+    car = _car(snapshot)
+    return car.get("pit_box") is True or car.get("isInPit") is True
+
+
+def _number(value: Any) -> float | None:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)) else None
+
+
+def _service_sections(snapshot: Mapping[str, Any] | None) -> list[Mapping[str, Any]]:
+    if not isinstance(snapshot, Mapping):
+        return []
+    sections: list[Mapping[str, Any]] = [snapshot]
+    for name in ("service", "pit_service", "planned_service", "strategy", "session", "car", "tyres"):
+        value = snapshot.get(name)
+        if isinstance(value, Mapping):
+            sections.append(value)
+    return sections
+
+
+def _confirmed_signal(snapshot: Mapping[str, Any] | None, names: tuple[str, ...]) -> str | None:
+    for section in _service_sections(snapshot):
+        for name in names:
+            value = section.get(name)
+            if value is True:
+                return name
+            if isinstance(value, str) and value.strip().upper() in _CONFIRMED_VALUES:
+                return name
+            if isinstance(value, Mapping):
+                for child_name in ("confirmed", "complete", "completed", "done", "applied", "verified"):
+                    child = value.get(child_name)
+                    if child is True or isinstance(child, str) and child.strip().upper() in _CONFIRMED_VALUES:
+                        return name
+    return None
+
+
+def _service_number(snapshot: Mapping[str, Any] | None, names: tuple[str, ...]) -> float | None:
+    for section in _service_sections(snapshot):
+        for name in names:
+            value = _numeric_total(section.get(name))
+            if value is not None:
+                return value
+    return None
+
+
+def _numeric_total(value: Any) -> float | None:
+    if isinstance(value, Mapping):
+        values = [_numeric_total(child) for child in value.values()]
+        numeric = [item for item in values if item is not None]
+        return sum(numeric) if numeric else None
+    return _number(value)
+
+
+def _service_evidence(previous: Mapping[str, Any] | None, snapshot: Mapping[str, Any] | None, fuel_jump_l: float) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    current_car, previous_car = _car(snapshot), _car(previous)
+    current_fuel, previous_fuel = _number(current_car.get("fuel_l")), _number(previous_car.get("fuel_l"))
+    fuel_delta = None if current_fuel is None or previous_fuel is None else current_fuel - previous_fuel
+    if fuel_delta is not None and fuel_delta >= fuel_jump_l:
+        evidence.append({"kind": "FUEL_INCREASE", "delta_l": fuel_delta})
+    if _confirmed_signal(snapshot, ("tyre_replacement_confirmed", "tyres_replaced", "tyre_change_confirmed", "tyre_reset_verified", "tyres_reset", "tyre_reset")):
+        evidence.append({"kind": "TYRE_REPLACEMENT"})
+    previous_tyres, current_tyres = (previous or {}).get("tyres", {}), (snapshot or {}).get("tyres", {})
+    if isinstance(previous_tyres, Mapping) and isinstance(current_tyres, Mapping):
+        for key in ("compound", "set_id", "tyre_set_id", "tyre_set"):
+            if previous_tyres.get(key) is not None and current_tyres.get(key) is not None and previous_tyres.get(key) != current_tyres.get(key):
+                evidence.append({"kind": "TYRE_REPLACEMENT", "field": key, "from": previous_tyres.get(key), "to": current_tyres.get(key)})
+                break
+        previous_reset = _number(previous_tyres.get("reset_counter"))
+        current_reset = _number(current_tyres.get("reset_counter"))
+        if previous_reset is not None and current_reset is not None and current_reset > previous_reset:
+            evidence.append({"kind": "TYRE_RESET", "from": previous_reset, "to": current_reset})
+    previous_damage = _service_number(previous, ("damage", "damage_level", "damage_percent", "repair_damage"))
+    current_damage = _service_number(snapshot, ("damage", "damage_level", "damage_percent", "repair_damage"))
+    if previous_damage is not None and current_damage is not None and current_damage < previous_damage:
+        evidence.append({"kind": "REPAIR_COMPLETION", "from": previous_damage, "to": current_damage})
+    if _confirmed_signal(snapshot, ("repair_complete", "repairs_complete", "repair_completed", "repair_confirmed", "repairs_confirmed")):
+        evidence.append({"kind": "REPAIR_COMPLETION"})
+    if _confirmed_signal(snapshot, ("driver_change_confirmed", "driver_change_completed", "planned_driver_change", "service_confirmed", "planned_service_confirmed", "service_completed")):
+        evidence.append({"kind": "PLANNED_SERVICE"})
+    if _confirmed_signal(snapshot, ("manual_new_stint_confirmation", "new_stint_confirmed", "manual_service_confirmation")):
+        evidence.append({"kind": "MANUAL_NEW_STINT"})
+    return evidence
 
 
 def _world_distance(left: Any, right: Any) -> float | None:
@@ -75,6 +167,9 @@ class PitLearner:
     latest_observation: dict[str, Any] | None = None
     latest_rejection: dict[str, Any] | None = None
     sequence: int = 0
+    service_fuel_jump_l: float = 1.0
+    manual_new_stint_confirmation: bool = False
+    last_confirmed_exit: dict[str, Any] | None = None
 
     def set_marker(self, marker: Mapping[str, Any] | None, snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
         identity = snapshot.get("identity", {}) if isinstance(snapshot, Mapping) else {}
@@ -88,10 +183,12 @@ class PitLearner:
         self.marker.setdefault("timing", {})
         return self.marker
 
-    def _emit(self, snapshot: Mapping[str, Any], event_type: str, payload: Mapping[str, Any] | None = None, *, confidence: str = "medium", rejection: str | None = None, suppression: str | None = None) -> None:
+    def _emit(self, snapshot: Mapping[str, Any], event_type: str, payload: Mapping[str, Any] | None = None, *, confidence: str = "medium", rejection: str | None = None, suppression: str | None = None) -> dict[str, Any]:
         self.sequence += 1
-        self.events.append({"schema_version": SCHEMA_VERSIONS["race_event"], "event_id": f"pit-event:{self.sequence}:{event_type}", "sequence": self.sequence, "event_type": event_type, "source_snapshot_id": snapshot.get("snapshot_id", "snapshot:unavailable"), "detection_time_s": snapshot.get("observed_monotonic_s"), "source_time_s": snapshot.get("source_timestamp_s"), "session_time_s": _session(snapshot).get("elapsed_s"), "identity_key": identity_key(snapshot.get("identity", {})), "confidence": confidence, "provenance": {"source": "CSP", "detector": "pit-learning-v1"}, "payload": copy.deepcopy(dict(payload or {})), "rejection_reason": rejection, "suppression_reason": suppression})
+        event = {"schema_version": SCHEMA_VERSIONS["race_event"], "event_id": f"pit-event:{self.sequence}:{event_type}", "sequence": self.sequence, "event_type": event_type, "source_snapshot_id": snapshot.get("snapshot_id", "snapshot:unavailable"), "detection_time_s": snapshot.get("observed_monotonic_s"), "source_time_s": snapshot.get("source_timestamp_s"), "session_time_s": _session(snapshot).get("elapsed_s"), "identity_key": identity_key(snapshot.get("identity", {})), "confidence": confidence, "provenance": {"source": "CSP", "detector": "pit-learning-v1"}, "payload": copy.deepcopy(dict(payload or {})), "rejection_reason": rejection, "suppression_reason": suppression}
+        self.events.append(event)
         self.events = self.events[-self.max_events :]
+        return event
 
     def _discontinuity(self, snapshot: Mapping[str, Any]) -> str | None:
         if self.previous is None:
@@ -118,7 +215,25 @@ class PitLearner:
 
     def _new_visit(self, snapshot: Mapping[str, Any], now_s: float, started_in_pit: bool) -> dict[str, Any]:
         car = _car(snapshot)
-        return {"started_at_s": now_s, "started_in_pit": started_in_pit, "entry_snapshot_id": None if started_in_pit else snapshot.get("snapshot_id"), "entry_spline": None if started_in_pit else car.get("spline"), "entry_world_position": None if started_in_pit else copy.deepcopy(car.get("world_position")), "box_arrival_s": None, "box_departure_s": None, "exit_s": None, "reset_suppressed": False, "classification": "INCOMPLETE_VISIT" if started_in_pit else None}
+        evidence = _service_evidence(None, snapshot, self.service_fuel_jump_l)
+        if self.manual_new_stint_confirmation:
+            evidence.append({"kind": "MANUAL_NEW_STINT"})
+            self.manual_new_stint_confirmation = False
+        return {
+            "started_at_s": now_s,
+            "started_in_pit": started_in_pit,
+            "entry_snapshot_id": None if started_in_pit else snapshot.get("snapshot_id"),
+            "entry_snapshot": None if started_in_pit else copy.deepcopy(dict(snapshot)),
+            "entry_spline": None if started_in_pit else car.get("spline"),
+            "entry_world_position": None if started_in_pit else copy.deepcopy(car.get("world_position")),
+            "box_arrival_s": None,
+            "box_departure_s": None,
+            "exit_s": None,
+            "exit_snapshot": None,
+            "reset_suppressed": False,
+            "service_evidence": evidence,
+            "classification": "UNKNOWN_STOP" if started_in_pit else None,
+        }
 
     def _observation(self, snapshot: Mapping[str, Any], kind: str, now_s: float) -> dict[str, Any]:
         candidate = self.candidate or {"snapshot": snapshot, "at_s": now_s}
@@ -167,21 +282,23 @@ class PitLearner:
         self.latest_rejection = None
         return True
 
-    def _finish_visit(self, now_s: float) -> None:
+    def _finish_visit(self, snapshot: Mapping[str, Any], now_s: float) -> None:
         if self.visit is None:
             return
+        self.visit["exit_snapshot"] = copy.deepcopy(dict(snapshot))
         self.visit["exit_s"] = now_s
-        if self.visit.get("reset_suppressed"):
-            classification = "RESET_SUPPRESSED_VISIT"
-        elif self.visit.get("entry_spline") is None:
-            classification = "INCOMPLETE_VISIT"
+        if self.visit.get("reset_suppressed") or self.visit.get("started_in_pit") or self.visit.get("entry_snapshot") is None:
+            classification, classification_reason = "UNKNOWN_STOP", "ENTRY_OR_RESET_UNTRUSTWORTHY"
+        elif self.visit.get("service_evidence"):
+            classification, classification_reason = "SERVICE_STOP", "CONFIRMED_SERVICE_EVIDENCE"
         elif self.visit.get("box_arrival_s") is None:
-            classification = "DRIVE_THROUGH"
+            classification, classification_reason = "DRIVE_THROUGH", "NO_PIT_BOX_ARRIVAL"
         elif self.visit.get("box_departure_s") is None:
-            classification = "INCOMPLETE_VISIT"
+            classification, classification_reason = "UNKNOWN_STOP", "PIT_BOX_STATE_INCOMPLETE"
         else:
-            classification = "NORMAL_STOP"
+            classification, classification_reason = "STOP_GO", "PIT_BOX_WITHOUT_SERVICE_EVIDENCE"
         self.visit["classification"] = classification
+        self.visit["classification_reason"] = classification_reason
         self.visit["total_lane_duration_s"] = max(0.0, now_s - self.visit["started_at_s"])
         if self.visit.get("box_arrival_s") is not None and self.visit.get("box_departure_s") is not None:
             self.visit["service_duration_s"] = max(0.0, self.visit["box_departure_s"] - self.visit["box_arrival_s"])
@@ -191,12 +308,19 @@ class PitLearner:
         self.last_visit = copy.deepcopy(self.visit)
         self.visit = None
 
+    def confirm_new_stint(self) -> bool:
+        """Record an explicit operator confirmation for the active pit visit."""
+        if self.visit is None:
+            self.manual_new_stint_confirmation = True
+            return False
+        self.visit.setdefault("service_evidence", []).append({"kind": "MANUAL_NEW_STINT"})
+        return True
+
     def update(self, snapshot: Mapping[str, Any], now_s: float) -> dict[str, Any]:
         snapshot = copy.deepcopy(dict(snapshot))
-        current_car = _car(snapshot)
-        current_lane, current_box = current_car.get("pit_lane") is True, current_car.get("pit_box") is True
-        previous_car = _car(self.previous)
-        was_lane, was_box = self.previous is not None and previous_car.get("pit_lane") is True, self.previous is not None and previous_car.get("pit_box") is True
+        current_lane, current_box = _pit_lane(snapshot), _pit_box(snapshot)
+        was_lane, was_box = _pit_lane(self.previous), _pit_box(self.previous)
+        self.last_confirmed_exit = None
         discontinuity = self._discontinuity(snapshot)
         if discontinuity:
             self.suppress_reason = discontinuity
@@ -237,26 +361,36 @@ class PitLearner:
                 if current_lane:
                     self.state = "LEAVING_PIT_BOX"
                 self._emit(snapshot, "PIT_BOX_DEPARTURE", {"service_end_s": now_s})
+        if self.visit is not None:
+            evidence = _service_evidence(self.previous, snapshot, self.service_fuel_jump_l)
+            if evidence:
+                self.visit.setdefault("service_evidence", []).extend(evidence)
         if self.candidate:
             kind, candidate = self.candidate["kind"], self.candidate
             stable = now_s - candidate["at_s"] >= self.debounce_s
             same_state = current_lane if kind == "ENTRY" else not current_lane
-            old_reset, new_reset = _car(candidate["snapshot"]).get("reset_counter"), current_car.get("reset_counter")
-            movement = _world_distance(_car(candidate["snapshot"]).get("world_position"), current_car.get("world_position"))
+            old_car, current_car = _car(candidate["snapshot"]), _car(snapshot)
+            old_reset, new_reset = old_car.get("reset_counter"), current_car.get("reset_counter")
+            movement = _world_distance(old_car.get("world_position"), current_car.get("world_position"))
             candidate_reason = self.suppress_reason if self.suppress_reason is not None else None if stable and same_state else "STABILITY_PENDING" if not stable else "CANDIDATE_INTERRUPTED"
             if isinstance(old_reset, (int, float)) and isinstance(new_reset, (int, float)) and old_reset != new_reset:
                 candidate_reason = "RESET_COUNTER_CHANGED"
             if movement is not None and movement > self.movement_limit_m:
                 candidate_reason = "WORLD_POSITION_JUMP"
-            if candidate_reason is None:
+            if candidate_reason is None and same_state:
                 accepted = self._accept(snapshot, kind, now_s)
-                self._emit(snapshot, "PIT_ENTRY_CONFIRMED" if kind == "ENTRY" and accepted else "PIT_EXIT_CONFIRMED" if kind == "EXIT" and accepted else "PIT_ENTRY_REJECTED" if kind == "ENTRY" else "PIT_EXIT_REJECTED", {"marker_state": self.marker.get("state") if self.marker else "UNAVAILABLE"}, confidence="high" if accepted else "low", rejection=None if accepted else self.latest_rejection.get("reason") if self.latest_rejection else "REJECTED", suppression=self.suppress_reason)
                 self.candidate = None
-                if kind == "EXIT":
+                if kind == "ENTRY":
+                    self._emit(snapshot, "PIT_ENTRY_CONFIRMED" if accepted else "PIT_ENTRY_REJECTED", {"marker_state": self.marker.get("state") if self.marker else "UNAVAILABLE"}, confidence="high" if accepted else "low", rejection=None if accepted else self.latest_rejection.get("reason") if self.latest_rejection else "REJECTED", suppression=self.suppress_reason)
+                else:
+                    self._finish_visit(snapshot, now_s)
+                    classification = self.last_visit.get("classification") if self.last_visit else "UNKNOWN_STOP"
+                    exit_event = self._emit(snapshot, "PIT_EXIT_CONFIRMED" if accepted else "PIT_EXIT_REJECTED", {"marker_state": self.marker.get("state") if self.marker else "UNAVAILABLE", "classification": classification}, confidence="high" if accepted else "low", rejection=None if accepted else self.latest_rejection.get("reason") if self.latest_rejection else "REJECTED", suppression=self.suppress_reason)
+                    if classification == "SERVICE_STOP":
+                        self.last_confirmed_exit = self._emit(snapshot, "PIT_SERVICE_STOP_CONFIRMED", {"classification": classification, "exit_event_id": exit_event["event_id"], "visit": copy.deepcopy(self.last_visit)}, confidence="high")
                     self.state = "BACK_ON_TRACK"
-                    self._finish_visit(now_s)
                     self.suppress_reason = None
-            elif candidate_reason != "STABILITY_PENDING" and kind == "ENTRY" and not current_lane:
+            elif candidate_reason != "STABILITY_PENDING":
                 rejection = self._observation(snapshot, kind, now_s)
                 rejection["rejection_reasons"] = [candidate_reason]
                 if self.marker is not None:
@@ -264,12 +398,19 @@ class PitLearner:
                     self.marker["rejected_observations"] = self.marker["rejected_observations"][-self.max_observations :]
                 self.latest_rejection = rejection
                 self.candidate = None
-                self.visit = None
-                self.state = "BACK_ON_TRACK"
-                self._emit(snapshot, "PIT_ENTRY_REJECTED", {"reason": candidate_reason}, confidence="low", rejection=candidate_reason)
+                if kind == "ENTRY":
+                    self.visit = None
+                    self.state = "BACK_ON_TRACK"
+                    self._emit(snapshot, "PIT_ENTRY_REJECTED", {"reason": candidate_reason}, confidence="low", rejection=candidate_reason)
+                else:
+                    self._finish_visit(snapshot, now_s)
+                    classification = self.last_visit.get("classification") if self.last_visit else "UNKNOWN_STOP"
+                    self.state = "BACK_ON_TRACK"
+                    self._emit(snapshot, "PIT_EXIT_REJECTED", {"reason": candidate_reason, "classification": classification}, confidence="low", rejection=candidate_reason, suppression=self.suppress_reason)
+                    self.suppress_reason = None
         elif not current_lane:
             if was_lane and self.visit is not None:
-                self._finish_visit(now_s)
+                self._finish_visit(snapshot, now_s)
             self.state = "RESET_SUPPRESSED" if self.suppress_reason else "ON_TRACK"
             self.suppress_reason = None
         elif current_box:
@@ -298,4 +439,4 @@ class PitLearner:
 
     def diagnostics(self, snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
         distance, reason = self.distance_to_entry(snapshot or {})
-        return {"state": self.state, "live_pit_lane": self.live_pit_lane, "live_pit_box": self.live_pit_box, "marker": copy.deepcopy(self.marker), "marker_state": self.marker.get("state", "UNAVAILABLE") if self.marker else "UNAVAILABLE", "confidence": self.marker.get("confidence", 0) if self.marker else 0, "accepted_observations": len(self.marker.get("accepted_observations", [])) if self.marker else 0, "rejected_observations": len(self.marker.get("rejected_observations", [])) if self.marker else 0, "distance_to_entry_m": distance, "distance_reason": reason, "latest_observation": copy.deepcopy(self.latest_observation), "latest_rejection": copy.deepcopy(self.latest_rejection), "current_visit": copy.deepcopy(self.visit), "last_visit": copy.deepcopy(self.last_visit), "suppress_reason": self.suppress_reason}
+        return {"state": self.state, "live_pit_lane": self.live_pit_lane, "live_pit_box": self.live_pit_box, "marker": copy.deepcopy(self.marker), "marker_state": self.marker.get("state", "UNAVAILABLE") if self.marker else "UNAVAILABLE", "confidence": self.marker.get("confidence", 0) if self.marker else 0, "accepted_observations": len(self.marker.get("accepted_observations", [])) if self.marker else 0, "rejected_observations": len(self.marker.get("rejected_observations", [])) if self.marker else 0, "distance_to_entry_m": distance, "distance_reason": reason, "latest_observation": copy.deepcopy(self.latest_observation), "latest_rejection": copy.deepcopy(self.latest_rejection), "current_visit": copy.deepcopy(self.visit), "last_visit": copy.deepcopy(self.last_visit), "last_confirmed_exit": copy.deepcopy(self.last_confirmed_exit), "suppress_reason": self.suppress_reason}

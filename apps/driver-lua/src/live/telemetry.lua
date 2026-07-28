@@ -271,11 +271,8 @@ do
       local identity_changed = previous.identity and previous.identity.key ~= snapshot.identity.key
       local lap_decreased = previous.session and snapshot.session and type(previous.session.completed_laps) == "number" and type(snapshot.session.completed_laps) == "number" and snapshot.session.completed_laps < previous.session.completed_laps
       local replay_changed = previous.session and snapshot.session and previous.session.replay ~= snapshot.session.replay
-      local refuel_jump = previous.car and snapshot.car and type(previous.car.fuel_l) == "number" and type(snapshot.car.fuel_l) == "number" and snapshot.car.fuel_l - previous.car.fuel_l > config.refuel_jump_l
       if identity_changed or lap_decreased or replay_changed then
         reset_model_history(state, identity_changed and "IDENTITY_CHANGED" or (lap_decreased and "SESSION_RESTART" or "REPLAY_STATE_CHANGED"))
-      elseif refuel_jump then
-        reset_stint_history(state, "REFUEL_TRANSITION")
       end
     end
     state.latest = snapshot
@@ -290,6 +287,9 @@ do
     pit_learning.update(state.pit, snapshot, now_s)
     state.pit_marker = state.pit.marker
     state.pit_diagnostics = pit_learning.diagnostics(state.pit, snapshot)
+    if state.pit.last_visit and state.pit.last_visit.classification == "SERVICE_STOP" and state.pit.last_confirmed_exit ~= nil then
+      reset_stint_history(state, "SERVICE_STOP")
+    end
     state.pit_marker_dirty = state.pit.marker_dirty == true
     state.pit_source = {
       isInPitlane = snapshot.car and snapshot.car.pit_lane,

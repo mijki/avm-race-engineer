@@ -16,6 +16,9 @@ class PitContractBoundaryTests(unittest.TestCase):
         self.assertIn("isInPitlane", source)
         self.assertIn("isInPit", source)
         self.assertIn("PIT_ENTRY_CANDIDATE", source)
+        self.assertIn("PIT_SERVICE_STOP_CONFIRMED", source)
+        for classification in ("DRIVE_THROUGH", "STOP_GO", "SERVICE_STOP", "UNKNOWN_STOP"):
+            self.assertIn(classification, source)
         self.assertIn("MANUAL_OVERRIDE", source)
 
     def test_pit_learning_does_not_redesign_renderers(self) -> None:

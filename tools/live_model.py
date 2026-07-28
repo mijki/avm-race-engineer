@@ -179,6 +179,8 @@ def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") 
     normalized_session = {key: session.get(key) for key in ("type", "elapsed_s", "remaining_s", "lap_limit", "completed_laps", "race_lap", "current_lap", "position", "total_cars", "track_length_m", "paused", "replay", "active", "finished")}
     if normalized_session["race_lap"] is None:
         normalized_session["race_lap"] = normalized_session["completed_laps"]
+    pit_lane = car.get("pit_lane") if car.get("pit_lane") is not None else car.get("isInPitlane")
+    pit_box = car.get("pit_box") if car.get("pit_box") is not None else car.get("isInPit")
     snapshot = {
         "schema_version": SCHEMA_VERSIONS["telemetry_snapshot"],
         "snapshot_id": raw.get("snapshot_id") or race_snapshot_id(identity, int(raw.get("sequence") or 0)),
@@ -188,7 +190,7 @@ def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") 
         "sequence": int(raw.get("sequence") or 0),
         "identity": {key: identity.get(key) for key in ("car_id", "track_id", "layout_id", "driver_name", "session_id", "configuration_id")},
         "session": normalized_session,
-        "car": {key: car.get(key) for key in ("speed_kmh", "fuel_l", "fuel_capacity_l", "spline", "distance_session_km", "pit_lane", "pit_box", "lap_time_s", "previous_lap_time_s", "best_lap_time_s", "lap_valid", "previous_lap_valid", "last_lap_cuts", "reset_counter")},
+        "car": {**{key: car.get(key) for key in ("speed_kmh", "fuel_l", "fuel_capacity_l", "spline", "distance_session_km", "lap_time_s", "previous_lap_time_s", "best_lap_time_s", "lap_valid", "previous_lap_valid", "last_lap_cuts", "reset_counter")}, "pit_lane": pit_lane, "pit_box": pit_box},
         "tyres": {key: tyres.get(key) for key in ("compound", "core_c", "surface_c", "wear", "pressure_kpa", "optimum_c", "wheels")},
         "environment": {key: environment.get(key) for key in ("ambient_c", "road_c", "wind_kmh", "weather_type", "rain_intensity", "track_wetness", "standing_water", "grip")},
     }
@@ -349,7 +351,7 @@ class LapTracker:
                 delta = car["distance_session_km"] - self.lap_start_distance_km
                 if 0 < delta < 100:
                     distance = delta
-            event = {"lap_number": previous_count, "lap_time_s": car.get("previous_lap_time_s"), "fuel_used_l": fuel_used, "distance_km": distance, "accepted": reason is None, "reason": reason, "regime": reason or "green_valid", "incomplete": current_count - previous_count != 1}
+            event = {"lap_number": previous_count, "lap_time_s": car.get("previous_lap_time_s"), "fuel_used_l": fuel_used, "distance_km": distance, "accepted": reason is None, "reason": reason, "regime": reason or "green_valid", "pit_lane": in_lap, "out_lap": self.out_lap_pending, "incomplete": current_count - previous_count != 1}
             self.out_lap_pending = False
             self.lap_start_fuel_l = car.get("fuel_l")
             self.lap_start_distance_km = car.get("distance_session_km")
@@ -357,6 +359,26 @@ class LapTracker:
             self.out_lap_pending = True
         self.previous = snapshot
         return event
+
+
+def _pit_lane(snapshot: dict[str, Any] | None) -> bool:
+    car = (snapshot or {}).get("car", {}) if isinstance(snapshot, dict) else {}
+    return car.get("pit_lane") is True or car.get("isInPitlane") is True
+
+
+def _pit_box(snapshot: dict[str, Any] | None) -> bool:
+    car = (snapshot or {}).get("car", {}) if isinstance(snapshot, dict) else {}
+    return car.get("pit_box") is True or car.get("isInPit") is True
+
+
+def _service_boundary(event: dict[str, Any] | None) -> bool:
+    if not isinstance(event, dict):
+        return False
+    if event.get("event_type") in {"PIT_SERVICE_STOP_CONFIRMED", "MANUAL_NEW_STINT_CONFIRMED"}:
+        return True
+    payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+    classification = event.get("classification") or payload.get("classification") or payload.get("pit_visit_classification")
+    return classification == "SERVICE_STOP"
 
 
 @dataclass
@@ -375,6 +397,7 @@ class StintTracker:
     stint_history: list[dict[str, Any]] = field(default_factory=list)
     awaiting_boundary: bool = False
     end_reason: str | None = None
+    last_pit_visit_classification: str | None = None
 
     def reset(self, reason: str | None = None) -> None:
         identity = self.identity
@@ -403,7 +426,7 @@ class StintTracker:
         session = snapshot["session"]
         car = snapshot["car"]
         if boundary_confirmed:
-            self._archive_current(now_s, "PIT_EXIT_CONFIRMED")
+            self._archive_current(now_s, "SERVICE_STOP")
             self.stint_number += 1
         elif self.stint_number == 0:
             self.stint_number = 1
@@ -415,6 +438,12 @@ class StintTracker:
         self.start_lap = session.get("current_lap") or ((session.get("completed_laps") or 0) + 1)
         self.completed_laps = 0
         self.current_stint_lap = 0
+        self.end_reason = None
+
+    def _resume_after_pit_visit(self, classification: str | None) -> None:
+        self.active = True
+        self.awaiting_boundary = False
+        self.last_pit_visit_classification = classification
         self.end_reason = None
 
     def update(self, snapshot: dict[str, Any], now_s: float, fuel_jump_l: float = 1.0, boundary_event: dict[str, Any] | None = None) -> None:
@@ -429,20 +458,29 @@ class StintTracker:
             self.reset("SESSION_RESTART"); self.identity = key
         if previous and previous["session"].get("replay") != session.get("replay"):
             self.reset("REPLAY_STATE_CHANGED"); self.identity = key
-        on_track = not car.get("pit_lane") and not car.get("pit_box")
+        on_track = not _pit_lane(snapshot) and not _pit_box(snapshot)
         if self.active and not on_track:
             self.active = False; self.awaiting_boundary = True; self.end_reason = "PIT_ENTRY"
         if not self.active and on_track and session.get("active", True) and not session.get("finished"):
-            confirmed_exit = isinstance(boundary_event, dict) and boundary_event.get("event_type") == "PIT_EXIT_CONFIRMED"
-            if self.stint_number == 0 or (self.awaiting_boundary and confirmed_exit):
-                self._begin(snapshot, now_s, self.stint_number > 0 and confirmed_exit)
+            service_stop = _service_boundary(boundary_event)
+            classification = None
+            if isinstance(boundary_event, dict):
+                payload = boundary_event.get("payload") if isinstance(boundary_event.get("payload"), dict) else {}
+                classification = boundary_event.get("classification") or payload.get("classification") or payload.get("pit_visit_classification")
+            if self.stint_number == 0:
+                self._begin(snapshot, now_s, False)
+            elif self.awaiting_boundary and service_stop:
+                self._begin(snapshot, now_s, True)
+                self.last_pit_visit_classification = "SERVICE_STOP"
+            elif self.awaiting_boundary:
+                self._resume_after_pit_visit(classification or "UNKNOWN_STOP")
         if session.get("finished"):
             self.active = False; self.awaiting_boundary = False; self.end_reason = "SESSION_END"
         self.previous = snapshot
 
     def record_lap(self, event: dict[str, Any]) -> None:
         """Count a completed lap for stint progress, including out-laps."""
-        if self.active and event.get("incomplete") is not True:
+        if self.active and event.get("incomplete") is not True and event.get("pit_lane") is not True:
             self.current_stint_lap += 1
             self.completed_laps = self.current_stint_lap
 

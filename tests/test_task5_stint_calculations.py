@@ -77,7 +77,7 @@ class StintCalculationTests(unittest.TestCase):
         laps = [raw_lap(1), raw_lap(2), raw_lap(3)]
         events = [
             {"event_id": "refuel", "event_type": "REFUEL", "detection_time_s": 150, "payload": {"delta_l": 20}},
-            {"event_id": "pit-exit", "event_type": "PIT_EXIT_CONFIRMED", "detection_time_s": 250},
+            {"event_id": "pit-exit", "event_type": "PIT_SERVICE_STOP_CONFIRMED", "detection_time_s": 250, "payload": {"classification": "SERVICE_STOP"}},
         ]
         result = StintCalculationEngine().calculate(laps, events)
         self.assertEqual([item["stint_id"] for item in result["stints"]], ["stint:car|track|main|session|setup:1", "stint:car|track|main|session|setup:2"])
@@ -87,13 +87,18 @@ class StintCalculationTests(unittest.TestCase):
         laps = [raw_lap(1), raw_lap(2), raw_lap(3)]
         candidate = [{"event_id": "pit-exit", "event_type": "PIT_EXIT_CANDIDATE", "detection_time_s": 250}]
         confirmed = [{"event_id": "pit-exit", "event_type": "PIT_EXIT_CONFIRMED", "detection_time_s": 250}]
+        service = [{"event_id": "service-exit", "event_type": "PIT_SERVICE_STOP_CONFIRMED", "detection_time_s": 250, "payload": {"classification": "SERVICE_STOP"}}]
         self.assertEqual(len(StintCalculationEngine().calculate(laps, candidate)["stints"]), 1)
-        self.assertEqual(len(StintCalculationEngine().calculate(laps, confirmed)["stints"]), 2)
+        self.assertEqual(len(StintCalculationEngine().calculate(laps, confirmed)["stints"]), 1)
+        self.assertEqual(len(StintCalculationEngine().calculate(laps, service)["stints"]), 2)
 
     def test_refuel_only_boundary_and_reset_does_not_boundary(self):
         laps = [raw_lap(1), raw_lap(2), raw_lap(3)]
         refuel = [{"event_id": "refuel", "event_type": "REFUEL", "payload": {"lap_number": 2, "delta_l": 5}}]
         result = StintCalculationEngine().calculate(laps, refuel)
+        self.assertEqual(len(result["stints"]), 1)
+        service = [{"event_id": "service", "event_type": "PIT_SERVICE_STOP_CONFIRMED", "payload": {"lap_number": 2, "classification": "SERVICE_STOP"}}]
+        result = StintCalculationEngine().calculate(laps, service)
         self.assertEqual(len(result["stints"]), 2)
         reset = [{"event_id": "reset", "event_type": "RESET", "payload": {"lap_number": 2}}]
         result = StintCalculationEngine().calculate(laps, reset)

@@ -20,6 +20,7 @@ do
       previous_stint = nil,
       stint_history = {},
       awaiting_boundary = false,
+      last_pit_visit_classification = nil,
       end_reason = nil,
       last_update_s = nil,
     }
@@ -41,12 +42,20 @@ do
     state.previous_stint = nil
     state.stint_history = {}
     state.awaiting_boundary = false
+    state.last_pit_visit_classification = nil
     state.end_reason = reason
   end
 
   local function on_track(snapshot)
     local car = snapshot.car or {}
-    return car.pit_lane ~= true and car.pit_box ~= true
+    return car.pit_lane ~= true and car.isInPitlane ~= true and car.pit_box ~= true and car.isInPit ~= true
+  end
+
+  local function service_boundary(event)
+    if type(event) ~= "table" then return false end
+    if event.event_type == "PIT_SERVICE_STOP_CONFIRMED" or event.event_type == "MANUAL_NEW_STINT_CONFIRMED" then return true end
+    local payload = type(event.payload) == "table" and event.payload or {}
+    return event.classification == "SERVICE_STOP" or payload.classification == "SERVICE_STOP" or payload.pit_visit_classification == "SERVICE_STOP"
   end
 
   local function archive_current(state, end_s, reason)
@@ -70,7 +79,7 @@ do
     local session = snapshot.session or {}
     local car = snapshot.car or {}
     if boundary_confirmed then
-      archive_current(state, now_s, "PIT_EXIT_CONFIRMED")
+      archive_current(state, now_s, "SERVICE_STOP")
       state.stint_number = state.stint_number + 1
     elseif state.stint_number == 0 then
       state.stint_number = 1
@@ -87,6 +96,13 @@ do
     state.current_stint_lap = 0
     state.current_lap = session.current_lap or state.start_lap
     state.regime = boundary_confirmed and "out_lap" or "green_valid"
+    state.end_reason = nil
+  end
+
+  local function resume_after_pit_visit(state, classification)
+    state.active = true
+    state.awaiting_boundary = false
+    state.last_pit_visit_classification = classification
     state.end_reason = nil
   end
 
@@ -108,21 +124,27 @@ do
       stint_tracker.reset(state, "REPLAY_STATE_CHANGED")
       state.identity_key = key
     end
-    if state.active and (car.pit_lane == true or car.pit_box == true) then
+    if state.active and (car.pit_lane == true or car.isInPitlane == true or car.pit_box == true or car.isInPit == true) then
       state.active = false
       state.awaiting_boundary = true
       state.end_reason = "PIT_ENTRY"
     end
-    local confirmed_exit = type(boundary_event) == "table" and boundary_event.event_type == "PIT_EXIT_CONFIRMED"
     if not state.active and on_track(snapshot) and session.active ~= false and session.finished ~= true then
+      local service_stop = service_boundary(boundary_event)
+      local classification = type(boundary_event) == "table" and boundary_event.classification or nil
+      local payload = type(boundary_event) == "table" and boundary_event.payload or nil
+      if classification == nil and type(payload) == "table" then classification = payload.classification or payload.pit_visit_classification end
       if state.stint_number == 0 then
         begin_stint(state, snapshot, now_s, false)
-      elseif state.awaiting_boundary and confirmed_exit then
+      elseif state.awaiting_boundary and service_stop then
         begin_stint(state, snapshot, now_s, true)
+        state.last_pit_visit_classification = "SERVICE_STOP"
+      elseif state.awaiting_boundary then
+        resume_after_pit_visit(state, classification or "UNKNOWN_STOP")
       end
     elseif state.active then
       state.current_lap = session.current_lap or state.current_lap
-      if car.pit_lane then state.regime = "pit_lane" end
+      if car.pit_lane or car.isInPitlane then state.regime = "pit_lane" end
     end
     if session.finished == true then
       state.active = false
@@ -136,7 +158,7 @@ do
   function stint_tracker.accept_lap(state, event)
     -- Progress counts a completed lap belonging to the active stint even when
     -- that lap is excluded from pace/fuel samples (for example the out-lap).
-    if state.active and type(event) == "table" and event.incomplete ~= true then
+    if state.active and type(event) == "table" and event.incomplete ~= true and event.pit_lane ~= true then
       state.current_stint_lap = state.current_stint_lap + 1
       state.completed_laps = state.current_stint_lap
       state.regime = event.regime or "green_valid"

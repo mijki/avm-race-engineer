@@ -119,7 +119,7 @@ class ForecastEngineTests(unittest.TestCase):
         self.assertEqual(serialize_forecasts(first), serialize_forecasts(engine.calculate(calculated())))
 
     def test_post_pit_empty_stint_is_engine_owned_and_retains_previous_stint(self):
-        events = [{"event_id": "pit-exit", "event_type": "PIT_EXIT_CONFIRMED", "detection_time_s": 250}]
+        events = [{"event_id": "pit-service", "event_type": "PIT_SERVICE_STOP_CONFIRMED", "detection_time_s": 250, "payload": {"classification": "SERVICE_STOP"}}]
         before = calculated([lap(1), lap(2)], snapshot_value=snapshot(current_lap=3), events=events)
         self.assertEqual(before["progress"]["current_stint_id"], "stint:car|track|main|session|cfg:2")
         self.assertEqual(before["progress"]["current_stint_lap"], 0)

@@ -14,6 +14,13 @@ do
     RESET_SUPPRESSED = "RESET_SUPPRESSED",
   }
 
+  pit_learning.classifications = {
+    DRIVE_THROUGH = "DRIVE_THROUGH",
+    STOP_GO = "STOP_GO",
+    SERVICE_STOP = "SERVICE_STOP",
+    UNKNOWN_STOP = "UNKNOWN_STOP",
+  }
+
   local function number(value)
     return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
   end
@@ -34,6 +41,92 @@ do
 
   local function car(snapshot)
     return snapshot and snapshot.car or {}
+  end
+
+  local function pit_lane(snapshot)
+    local current_car = car(snapshot)
+    return current_car.pit_lane == true or current_car.isInPitlane == true
+  end
+
+  local function pit_box(snapshot)
+    local current_car = car(snapshot)
+    return current_car.pit_box == true or current_car.isInPit == true
+  end
+
+  local function confirmed(value)
+    if value == true then return true end
+    if type(value) == "string" then
+      local token = string.upper(value)
+      return token == "CONFIRMED" or token == "COMPLETE" or token == "COMPLETED" or token == "DONE" or token == "APPLIED" or token == "VERIFIED" or token == "TRUE"
+    end
+    if type(value) == "table" then
+      for _, key in ipairs({ "confirmed", "complete", "completed", "done", "applied", "verified" }) do
+        if confirmed(value[key]) then return true end
+      end
+    end
+    return false
+  end
+
+  local function service_signal(snapshot, names)
+    local sections = { snapshot, snapshot and snapshot.service, snapshot and snapshot.pit_service, snapshot and snapshot.planned_service, snapshot and snapshot.strategy, snapshot and snapshot.session, snapshot and snapshot.car, snapshot and snapshot.tyres }
+    for section_index = 1, #sections do
+      local section = sections[section_index]
+      if type(section) == "table" then
+        for name_index = 1, #names do
+          local name = names[name_index]
+          if confirmed(section[name]) then return name end
+        end
+      end
+    end
+    return nil
+  end
+
+  local function service_evidence(previous, snapshot, fuel_jump_l)
+    local evidence = {}
+    local current_car, previous_car = car(snapshot), car(previous)
+    if number(current_car.fuel_l) and number(previous_car.fuel_l) and current_car.fuel_l - previous_car.fuel_l >= (fuel_jump_l or 1) then
+      evidence[#evidence + 1] = { kind = "FUEL_INCREASE", delta_l = current_car.fuel_l - previous_car.fuel_l }
+    end
+    if service_signal(snapshot, { "tyre_replacement_confirmed", "tyres_replaced", "tyre_change_confirmed", "tyre_reset_verified", "tyres_reset", "tyre_reset" }) ~= nil then
+      evidence[#evidence + 1] = { kind = "TYRE_REPLACEMENT" }
+    end
+    local previous_tyres, current_tyres = previous and previous.tyres or {}, snapshot and snapshot.tyres or {}
+    if type(previous_tyres) == "table" and type(current_tyres) == "table" then
+      for _, key in ipairs({ "compound", "set_id", "tyre_set_id", "tyre_set" }) do
+        if previous_tyres[key] ~= nil and current_tyres[key] ~= nil and previous_tyres[key] ~= current_tyres[key] then
+          evidence[#evidence + 1] = { kind = "TYRE_REPLACEMENT", field = key, from = previous_tyres[key], to = current_tyres[key] }
+          break
+        end
+      end
+      if number(previous_tyres.reset_counter) and number(current_tyres.reset_counter) and current_tyres.reset_counter > previous_tyres.reset_counter then
+        evidence[#evidence + 1] = { kind = "TYRE_RESET", from = previous_tyres.reset_counter, to = current_tyres.reset_counter }
+      end
+    end
+    local function numeric_total(value)
+      if number(value) then return value end
+      if type(value) ~= "table" then return nil end
+      local total, count = 0, 0
+      for _, child in pairs(value) do
+        local child_total = numeric_total(child)
+        if child_total ~= nil then total = total + child_total; count = count + 1 end
+      end
+      return count > 0 and total or nil
+    end
+    local previous_damage = numeric_total(previous_car.damage or previous_car.damage_level)
+    local current_damage = numeric_total(current_car.damage or current_car.damage_level)
+    if previous_damage ~= nil and current_damage ~= nil and current_damage < previous_damage then
+      evidence[#evidence + 1] = { kind = "REPAIR_COMPLETION", from = previous_damage, to = current_damage }
+    end
+    if service_signal(snapshot, { "repair_complete", "repairs_complete", "repair_completed", "repair_confirmed" }) ~= nil then
+      evidence[#evidence + 1] = { kind = "REPAIR_COMPLETION" }
+    end
+    if service_signal(snapshot, { "driver_change_confirmed", "driver_change_completed", "planned_driver_change", "service_confirmed", "planned_service_confirmed", "service_completed" }) ~= nil then
+      evidence[#evidence + 1] = { kind = "PLANNED_SERVICE" }
+    end
+    if service_signal(snapshot, { "manual_new_stint_confirmation", "new_stint_confirmed", "manual_service_confirmation" }) ~= nil then
+      evidence[#evidence + 1] = { kind = "MANUAL_NEW_STINT" }
+    end
+    return evidence
   end
 
   local function circular_delta(left, right)
@@ -81,19 +174,30 @@ do
 
   local function new_visit(snapshot, now_s, started_in_pit)
     local current_car = car(snapshot)
+    local evidence = service_evidence(nil, snapshot, 1)
     return {
       started_at_s = now_s,
       started_in_pit = started_in_pit == true,
       entry_snapshot_id = started_in_pit and nil or snapshot.snapshot_id,
+      entry_snapshot = started_in_pit and nil or copy(snapshot),
       entry_spline = started_in_pit and nil or current_car.spline,
       entry_world_position = started_in_pit and nil or copy(current_car.world_position),
       box_arrival_s = nil,
       box_departure_s = nil,
       exit_s = nil,
+      exit_snapshot = nil,
       reset_suppressed = false,
       movement_m = 0,
-      classification = started_in_pit and "INCOMPLETE_VISIT" or nil,
+      service_evidence = evidence,
+      classification = started_in_pit and "UNKNOWN_STOP" or nil,
     }
+  end
+
+  local function apply_manual_confirmation(state)
+    if state.visit == nil or state.manual_new_stint_confirmation ~= true then return end
+    state.visit.service_evidence = state.visit.service_evidence or {}
+    state.visit.service_evidence[#state.visit.service_evidence + 1] = { kind = "MANUAL_NEW_STINT" }
+    state.manual_new_stint_confirmation = false
   end
 
   function pit_learning.new(config)
@@ -121,6 +225,8 @@ do
       latest_observation = nil,
       latest_rejection = nil,
       last_confirmed_exit = nil,
+      service_fuel_jump_l = config.refuel_jump_l or 1,
+      manual_new_stint_confirmation = false,
     }
   end
 
@@ -277,8 +383,8 @@ do
     local movement = world_distance(car(candidate.snapshot).world_position, car(snapshot).world_position)
     if movement ~= nil and movement > state.movement_limit_m then return false, "WORLD_POSITION_JUMP" end
     if now_s - candidate.at_s < state.debounce_s then return false, "STABILITY_PENDING" end
-    if kind == "ENTRY" and car(snapshot).pit_lane ~= true then return false, "CANDIDATE_INTERRUPTED" end
-    if kind == "EXIT" and car(snapshot).pit_lane == true then return false, "CANDIDATE_INTERRUPTED" end
+    if kind == "ENTRY" and not pit_lane(snapshot) then return false, "CANDIDATE_INTERRUPTED" end
+    if kind == "EXIT" and pit_lane(snapshot) then return false, "CANDIDATE_INTERRUPTED" end
     return true, nil
   end
 
@@ -292,6 +398,8 @@ do
         state.latest_rejection = rejected
         state.candidate = nil
         event(state, snapshot, kind == "ENTRY" and "PIT_ENTRY_REJECTED" or "PIT_EXIT_REJECTED", { reason = reason }, "low", reason, state.suppress_reason)
+      else
+        return nil
       end
       return false
     end
@@ -300,24 +408,29 @@ do
     observation.confirmation_state = accepted and "CONFIRMED" or "REJECTED"
     state.candidate = nil
     local emitted = event(state, snapshot, kind == "ENTRY" and (accepted and "PIT_ENTRY_CONFIRMED" or "PIT_ENTRY_REJECTED") or (accepted and "PIT_EXIT_CONFIRMED" or "PIT_EXIT_REJECTED"), { observation = observation, marker_state = state.marker and state.marker.state }, accepted and "high" or "low", rejection, state.suppress_reason)
-    if kind == "EXIT" and accepted then state.last_confirmed_exit = emitted end
     return accepted
   end
 
-  local function complete_visit(state, now_s)
+  local function complete_visit(state, snapshot, now_s)
     local visit = state.visit
     if visit == nil then return end
+    visit.exit_snapshot = copy(snapshot)
     visit.exit_s = now_s
-    if visit.entry_spline == nil then
-      visit.classification = "INCOMPLETE_VISIT"
-    elseif visit.reset_suppressed then
-      visit.classification = "RESET_SUPPRESSED_VISIT"
+    if visit.entry_snapshot == nil or visit.started_in_pit == true or visit.reset_suppressed then
+      visit.classification = "UNKNOWN_STOP"
+      visit.classification_reason = "ENTRY_OR_RESET_UNTRUSTWORTHY"
+    elseif #(visit.service_evidence or {}) > 0 then
+      visit.classification = "SERVICE_STOP"
+      visit.classification_reason = "CONFIRMED_SERVICE_EVIDENCE"
     elseif visit.box_arrival_s == nil then
       visit.classification = "DRIVE_THROUGH"
+      visit.classification_reason = "NO_PIT_BOX_ARRIVAL"
     elseif visit.box_departure_s == nil then
-      visit.classification = "INCOMPLETE_VISIT"
+      visit.classification = "UNKNOWN_STOP"
+      visit.classification_reason = "PIT_BOX_STATE_INCOMPLETE"
     else
-      visit.classification = "NORMAL_STOP"
+      visit.classification = "STOP_GO"
+      visit.classification_reason = "PIT_BOX_WITHOUT_SERVICE_EVIDENCE"
     end
     visit.total_lane_duration_s = math.max(0, (visit.exit_s or now_s) - visit.started_at_s)
     if visit.box_arrival_s ~= nil and visit.box_departure_s ~= nil then
@@ -342,10 +455,10 @@ do
     local current_car = car(snapshot)
     local previous = state.previous
     local previous_car = car(previous)
-    local current_lane = current_car.pit_lane == true
-    local current_box = current_car.pit_box == true
-    local was_lane = previous ~= nil and previous_car.pit_lane == true
-    local was_box = previous ~= nil and previous_car.pit_box == true
+    local current_lane = pit_lane(snapshot)
+    local current_box = pit_box(snapshot)
+    local was_lane = pit_lane(previous)
+    local was_box = pit_box(previous)
     local reason = discontinuity(previous, snapshot, state)
     if reason ~= nil then
       state.suppress_reason = reason
@@ -361,6 +474,7 @@ do
       state.live_pit_box = current_box
       if current_lane then
         state.visit = new_visit(snapshot, now_s, true)
+        apply_manual_confirmation(state)
         state.state = current_box and pit_learning.states.AT_PIT_BOX or pit_learning.states.IN_PIT_LANE
       else
         state.state = pit_learning.states.ON_TRACK
@@ -375,6 +489,7 @@ do
       if current_lane then
         state.candidate = { kind = "ENTRY", snapshot = copy(snapshot), at_s = now_s }
         state.visit = new_visit(snapshot, now_s, false)
+        apply_manual_confirmation(state)
         state.state = pit_learning.states.ENTRY_CANDIDATE
         event(state, snapshot, "PIT_ENTRY_CANDIDATE", { original_snapshot_id = snapshot.snapshot_id }, "low")
         -- The driver-facing fact is immediate; confidence only controls the
@@ -391,6 +506,7 @@ do
     if current_box ~= was_box then
       if current_box then
         if state.visit == nil then state.visit = new_visit(snapshot, now_s, true) end
+        apply_manual_confirmation(state)
         state.visit.box_arrival_s = now_s
         state.state = pit_learning.states.AT_PIT_BOX
         event(state, snapshot, "PIT_BOX_ARRIVAL", { service_start_s = now_s }, "medium")
@@ -400,15 +516,24 @@ do
         event(state, snapshot, "PIT_BOX_DEPARTURE", { service_end_s = now_s }, "medium")
       end
     end
+    if state.visit ~= nil then
+      local evidence = service_evidence(previous, snapshot, state.service_fuel_jump_l)
+      for index = 1, #evidence do state.visit.service_evidence[#state.visit.service_evidence + 1] = evidence[index] end
+    end
 
     if state.candidate ~= nil then
       local kind = state.candidate.kind
       if kind == "ENTRY" and current_lane then finalize_candidate(state, snapshot, now_s, kind)
       elseif kind == "EXIT" and not current_lane then
-        finalize_candidate(state, snapshot, now_s, kind)
-        state.state = pit_learning.states.BACK_ON_TRACK
-        complete_visit(state, now_s)
-        state.suppress_reason = nil
+        local accepted = finalize_candidate(state, snapshot, now_s, kind)
+        if accepted ~= nil then
+          state.state = pit_learning.states.BACK_ON_TRACK
+          complete_visit(state, snapshot, now_s)
+          if state.last_visit and state.last_visit.classification == "SERVICE_STOP" then
+            state.last_confirmed_exit = event(state, snapshot, "PIT_SERVICE_STOP_CONFIRMED", { classification = "SERVICE_STOP", visit = copy(state.last_visit) }, "high")
+          end
+          state.suppress_reason = nil
+        end
       elseif kind == "ENTRY" and not current_lane then
         finalize_candidate(state, snapshot, now_s, kind)
         state.state = pit_learning.states.BACK_ON_TRACK
@@ -416,7 +541,7 @@ do
       end
     elseif not current_lane then
       state.state = state.suppress_reason and pit_learning.states.RESET_SUPPRESSED or pit_learning.states.ON_TRACK
-      if was_lane and state.visit ~= nil then complete_visit(state, now_s) end
+      if was_lane and state.visit ~= nil then complete_visit(state, snapshot, now_s) end
       if state.suppress_reason ~= nil then state.suppress_reason = nil end
     elseif current_box then
       state.state = pit_learning.states.AT_PIT_BOX
@@ -430,6 +555,16 @@ do
     state.track_length_m = snapshot.session and snapshot.session.track_length_m or state.track_length_m
     state.previous = copy(snapshot)
     return state
+  end
+
+  function pit_learning.confirm_new_stint(state)
+    if state.visit == nil then
+      state.manual_new_stint_confirmation = true
+      return false
+    end
+    state.visit.service_evidence = state.visit.service_evidence or {}
+    state.visit.service_evidence[#state.visit.service_evidence + 1] = { kind = "MANUAL_NEW_STINT" }
+    return true
   end
 
   function pit_learning.forward_distance(current_spline, target_spline, track_length_m)

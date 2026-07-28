@@ -8,15 +8,18 @@ issue driver actions.
 
 ## Boundaries and identity
 
-The initial stint is `stint:<identity-key>:1`. A material pit-cycle exit,
-explicit driver/session boundary, material refuel without a later pit-exit
-marker, or configured compound/set change starts the next numbered stint.
-Material refuel plus its later pit exit is one pit-cycle boundary. Reset,
-teleport, and minor discontinuity evidence do not start a stint; they only
-affect lap eligibility. Pause/resume events pause live progress without
-deleting history; an incomplete current lap is simply not an accepted sample.
-Pit-exit candidates and lane/box transition events are evidence only; the
-ordinal advances only when the boundary is confirmed.
+The initial stint is `stint:<identity-key>:1`. A pit-lane visit is not a stint
+boundary by itself: `PIT_EXIT_CONFIRMED` without a service classification,
+drive-through, stop-and-go, and reset/teleport evidence all preserve the
+current stint. The ordinal advances only on an explicit service-stop event
+(`PIT_SERVICE_STOP_CONFIRMED`) or an explicit driver/session boundary.
+Material fuel increase, verified tyre replacement/reset, repair completion,
+planned service, and manual new-stint confirmation are service evidence only
+when the completed pit visit is classified `SERVICE_STOP`. Reset, teleport,
+and minor discontinuity evidence do not start a stint; they only affect lap
+eligibility. Pause/resume events pause live progress without deleting history;
+an incomplete current lap is simply not an accepted sample. Pit-exit
+candidates and lane/box transition events are evidence only.
 Every assigned completed lap receives a stable
 `stint_id`, `stint_number`, and one-based `stint_lap_number`.
 

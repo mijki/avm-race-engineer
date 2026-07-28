@@ -28,7 +28,7 @@ class PitStateTests(unittest.TestCase):
         learner.update(snapshot(4, lane=False, spline=0.02), 4)
         exited = learner.update(snapshot(4.2, lane=False, spline=0.03), 4.2)
         self.assertFalse(exited["live_pit_lane"])
-        self.assertEqual(exited["last_visit"]["classification"], "NORMAL_STOP")
+        self.assertEqual(exited["last_visit"]["classification"], "STOP_GO")
         self.assertAlmostEqual(exited["marker"]["entry_spline"], 0.91)
         self.assertAlmostEqual(exited["marker"]["exit_spline"], 0.02)
 
@@ -40,6 +40,111 @@ class PitStateTests(unittest.TestCase):
         learner.update(snapshot(3, lane=False, spline=0.02), 3)
         result = learner.update(snapshot(4, lane=False, spline=0.03), 4)
         self.assertEqual(result["last_visit"]["classification"], "DRIVE_THROUGH")
+
+    def test_service_classifications_require_evidence_not_pit_box_dwell(self) -> None:
+        def run(sequence: list[dict]) -> dict:
+            learner = PitLearner(debounce_s=0)
+            for item in sequence:
+                result = learner.update(item, item["observed_monotonic_s"])
+            return result
+
+        entry = snapshot(0, spline=0.89)
+        lane = snapshot(1, lane=True, spline=0.91)
+        box = snapshot(2, lane=True, box=True, spline=0.94)
+        departed = snapshot(3, lane=True, box=False, spline=0.95)
+        exit_snapshot = snapshot(4, lane=False, spline=0.02)
+        for item in (entry, lane, box, departed, exit_snapshot):
+            item["tyres"] = {"compound": "medium"}
+        self.assertEqual(run([entry, lane, exit_snapshot])["last_visit"]["classification"], "DRIVE_THROUGH")
+        self.assertEqual(run([entry, lane, box, departed, exit_snapshot])["last_visit"]["classification"], "STOP_GO")
+
+        fuel_exit = snapshot(4, lane=False, spline=0.02, fuel=50)
+        fuel_box = snapshot(2, lane=True, box=True, spline=0.94, fuel=20)
+        result = run([snapshot(0, fuel=20), snapshot(1, lane=True, spline=0.91, fuel=20), fuel_box, snapshot(3, lane=True, box=False, spline=0.95, fuel=50), fuel_exit])
+        self.assertEqual(result["last_visit"]["classification"], "SERVICE_STOP")
+        self.assertEqual(result["last_confirmed_exit"]["event_type"], "PIT_SERVICE_STOP_CONFIRMED")
+
+    def test_tyre_repair_and_combined_service_evidence(self) -> None:
+        def run(items: list[dict]) -> dict:
+            learner = PitLearner(debounce_s=0)
+            for item in items:
+                result = learner.update(item, item["observed_monotonic_s"])
+            return result["last_visit"]
+
+        entry = snapshot(0, spline=0.89)
+        lane = snapshot(1, lane=True, spline=0.91)
+        box = snapshot(2, lane=True, box=True, spline=0.94)
+        departed = snapshot(3, lane=True, box=False, spline=0.95)
+        exit_snapshot = snapshot(4, lane=False, spline=0.02)
+        for item in (entry, lane, box, departed, exit_snapshot):
+            item["tyres"] = {"compound": "medium"}
+
+        tyre_box = copy.deepcopy(box)
+        tyre_box["tyres"] = {"compound": "hard"}
+        tyre_exit = copy.deepcopy(exit_snapshot)
+        tyre_exit["tyres"] = {"compound": "hard"}
+        self.assertEqual(run([entry, lane, box, tyre_box, departed, tyre_exit])["classification"], "SERVICE_STOP")
+
+        damaged_box = copy.deepcopy(box)
+        damaged_box["car"]["damage"] = {"engine": 0.6}
+        repair_box = copy.deepcopy(damaged_box)
+        repair_box["car"]["damage"] = {"engine": 0.0}
+        repair_exit = copy.deepcopy(exit_snapshot)
+        repair_exit["car"]["damage"] = {"engine": 0.0}
+        damaged_entry = copy.deepcopy(entry)
+        damaged_entry["car"]["damage"] = {"engine": 0.6}
+        damaged_lane = copy.deepcopy(lane)
+        damaged_lane["car"]["damage"] = {"engine": 0.6}
+        self.assertEqual(run([damaged_entry, damaged_lane, damaged_box, repair_box, departed, repair_exit])["classification"], "SERVICE_STOP")
+
+        combined_box = copy.deepcopy(box)
+        combined_box["car"]["fuel_l"] = 20
+        combined_box["car"]["damage"] = {"engine": 0.0}
+        combined_box["tyres"] = {"compound": "hard"}
+        combined_exit = copy.deepcopy(exit_snapshot)
+        combined_exit["car"]["fuel_l"] = 50
+        combined_exit["car"]["damage"] = {"engine": 0.0}
+        combined_exit["tyres"] = {"compound": "hard"}
+        combined_entry = copy.deepcopy(entry)
+        combined_entry["car"]["damage"] = {"engine": 0.6}
+        combined_lane = copy.deepcopy(lane)
+        combined_lane["car"]["damage"] = {"engine": 0.6}
+        visit = run([combined_entry, combined_lane, combined_box, departed, combined_exit])
+        self.assertEqual(visit["classification"], "SERVICE_STOP")
+        self.assertGreaterEqual(len(visit["service_evidence"]), 3)
+
+        planned = copy.deepcopy(box)
+        planned["service_confirmed"] = True
+        planned_exit = copy.deepcopy(exit_snapshot)
+        planned_exit["service_confirmed"] = True
+        self.assertEqual(run([entry, lane, planned, departed, planned_exit])["classification"], "SERVICE_STOP")
+
+        manual = PitLearner(debounce_s=0)
+        manual.update(entry, 0)
+        manual.update(lane, 1)
+        self.assertTrue(manual.confirm_new_stint())
+        manual.update(exit_snapshot, 2)
+        manual.update(copy.deepcopy(exit_snapshot) | {"snapshot_id": "manual-exit-2"}, 2.1)
+        self.assertEqual(manual.last_visit["classification"], "SERVICE_STOP")
+
+    def test_repeated_incomplete_and_reset_visits_are_unknown_without_stint_implication(self) -> None:
+        learner = PitLearner(debounce_s=0)
+        learner.update(snapshot(0), 0)
+        learner.update(snapshot(1, lane=True, box=True), 1)
+        learner.update(snapshot(2, lane=False, box=True), 2)
+        self.assertEqual(learner.last_visit["classification"], "UNKNOWN_STOP")
+
+        learner.update(snapshot(3), 3)
+        learner.update(snapshot(4, lane=True), 4)
+        reset = snapshot(5, lane=True, reset=1)
+        learner.update(reset, 5)
+        learner.update(snapshot(6, lane=False, spline=0.03), 6)
+        self.assertEqual(learner.last_visit["classification"], "UNKNOWN_STOP")
+
+        learner.update(snapshot(7), 7)
+        learner.update(snapshot(8, lane=True), 8)
+        learner.update(snapshot(9, lane=False), 9)
+        self.assertEqual(learner.last_visit["classification"], "DRIVE_THROUGH")
 
     def test_start_in_pits_does_not_fabricate_entry_marker(self) -> None:
         learner = PitLearner(debounce_s=0)
