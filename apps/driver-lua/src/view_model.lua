@@ -305,6 +305,13 @@ local function live_reduce_v2(status, mode)
       next_tyres = "--",
       service = "--",
       state = status.pit and status.pit.calibrated and "CALIBRATED" or "NOT CALIBRATED",
+      live_state = status.pit and status.pit.live_state or "ON_TRACK",
+      live_pit_lane = status.pit and status.pit.live_pit_lane,
+      live_pit_box = status.pit and status.pit.live_pit_box,
+      marker_state = status.pit and status.pit.marker_state or "UNAVAILABLE",
+      marker_confidence = status.pit and status.pit.marker_confidence or 0,
+      observation_count = status.pit and status.pit.observation_count or 0,
+      override = status.pit and status.pit.override == true or false,
       box_in_laps = nil,
     },
     weather = {
@@ -375,6 +382,7 @@ local function live_reduce_v2(status, mode)
       raw = diagnostics.raw,
       calibration = diagnostics.calibration,
       calibration_armed = diagnostics.calibration_armed,
+      pit_learning = diagnostics.pit_learning,
       engineer_history = status.engineer and status.engineer.history or {},
     },
     calibration = {
@@ -521,6 +529,13 @@ local function live_reduce(status, mode)
       next_tyres = "--",
       service = "--",
       state = pit_metric and "Measured" or "Unknown",
+      live_state = status.pit and status.pit.live_state or "ON_TRACK",
+      live_pit_lane = status.pit and status.pit.live_pit_lane,
+      live_pit_box = status.pit and status.pit.live_pit_box,
+      marker_state = status.pit and status.pit.marker_state or "UNAVAILABLE",
+      marker_confidence = status.pit and status.pit.marker_confidence or 0,
+      observation_count = status.pit and status.pit.observation_count or 0,
+      override = status.pit and status.pit.override == true or false,
       box_in_laps = nil,
     },
     weather = {
@@ -579,6 +594,7 @@ local function live_reduce(status, mode)
       identity = identity,
       last_reset_reason = diagnostics.last_reset_reason,
       raw = diagnostics.raw,
+      pit_learning = diagnostics.pit_learning,
     },
     calibration = {
       summary = diagnostics.calibration and ("Validated for " .. live_safe(diagnostics.calibration.track_id) .. " / " .. live_safe(diagnostics.calibration.layout_id)) or formatting.reason(pit_reason),

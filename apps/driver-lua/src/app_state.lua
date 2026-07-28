@@ -21,6 +21,7 @@ local state = {
   alerts = nil,
   scenario_history = {},
   runtime_config = nil,
+  pit_marker_loaded = false,
 }
 
 local function effective_config(settings)
@@ -56,6 +57,7 @@ local function set_live_source()
   state.source_mode = "live"
   state.live = telemetry.new(config)
   telemetry.set_source_mode(state.live, "live")
+  state.pit_marker_loaded = false
   if state.live.identity ~= nil then
     telemetry.set_calibration(state.live, storage.load_calibration(state.live.identity))
   end
@@ -91,6 +93,15 @@ function state.update(dt)
   local delta = type(dt) == "number" and math.max(0, math.min(dt, 0.25)) or 0.016
   state.clock = state.clock + delta
   local status = telemetry.update(state.live, state.clock, state.runtime_config or config)
+  if state.live.latest and not state.pit_marker_loaded then
+    local stored_marker = storage.load_pit_marker(state.live.identity)
+    telemetry.set_pit_marker(state.live, stored_marker)
+    state.pit_marker_loaded = true
+  end
+  if state.live.pit_marker and state.live.pit_marker_dirty == true then
+    storage.save_pit_marker(state.live.identity, state.live.pit_marker)
+    state.live.pit_marker_dirty = false
+  end
   if state.live.latest and state.live.calibration == nil then
     state.live.calibration = storage.load_calibration(state.live.identity)
     telemetry.set_calibration(state.live, state.live.calibration)
@@ -318,8 +329,54 @@ end
 function state.test_pit_distance(self)
   local snapshot = self.live and self.live.latest
   if snapshot == nil then return nil, "SOURCE_UNAVAILABLE" end
-  return namespace.live.track_model.distance_to_pit(snapshot, self.live.calibration)
+  local calibration = self.live.calibration or namespace.live.pit_learning.calibration(self.live.pit, snapshot)
+  return namespace.live.track_model.distance_to_pit(snapshot, calibration)
 end
+
+function state.set_pit_marker_override(self, entry_spline, exit_spline)
+  local snapshot = self.live and self.live.latest
+  if self.mode ~= "garage" or snapshot == nil or snapshot.identity == nil then return false end
+  if type(entry_spline) ~= "number" or entry_spline < 0 or entry_spline >= 1 then return false end
+  if exit_spline ~= nil and (type(exit_spline) ~= "number" or exit_spline < 0 or exit_spline >= 1) then return false end
+  local marker = self.live.pit_marker or {}
+  marker.track_layout_key = namespace.contracts.track_layout_key(snapshot.identity)
+  marker.track_id = snapshot.identity.track_id
+  marker.layout_id = snapshot.identity.layout_id
+  marker.entry_spline = entry_spline
+  marker.exit_spline = exit_spline
+  marker.state = "MANUAL_OVERRIDE"
+  marker.manual_override = true
+  marker.source = "MANUAL_OVERRIDE"
+  marker.schema_version = "pit-marker-record-v1"
+  marker.accepted_observations = marker.accepted_observations or {}
+  marker.rejected_observations = marker.rejected_observations or {}
+  marker.timing = marker.timing or {}
+  self.live.pit_marker = namespace.live.pit_learning.manual_override(self.live.pit, marker)
+  storage.save_pit_marker(self.live.identity, self.live.pit_marker)
+  return true
+end
+
+function state.clear_pit_marker_override(self)
+  if self.live == nil then return false end
+  local changed = namespace.live.pit_learning.clear_override(self.live.pit)
+  self.live.pit_marker = self.live.pit.marker
+  if changed then storage.save_pit_marker(self.live.identity, self.live.pit_marker) end
+  return changed
+end
+
+function state.reset_pit_learning(self)
+  if self.live == nil then return false end
+  if self.live.identity then storage.reset_pit_marker(self.live.identity) end
+  self.live.pit_marker = nil
+  self.live.pit = namespace.live.pit_learning.new(self.runtime_config or config)
+  self.live.pit_marker_dirty = false
+  self.pit_marker_loaded = true
+  return true
+end
+
+state.set_pit_override = state.set_pit_marker_override
+state.clear_pit_override = state.clear_pit_marker_override
+state.return_to_automatic_learning = state.clear_pit_marker_override
 
 function state.inject_engineer_message(self, title, detail, priority, requires_acknowledgement)
   if self.mode ~= "garage" or self.live == nil then return false end
@@ -389,6 +446,7 @@ function state.reset_for_test()
   state.source_mode = config.default_source_mode
   state.mode = config.default_mode
   state.runtime_config = nil
+  state.pit_marker_loaded = false
 end
 
 namespace.app_state = state

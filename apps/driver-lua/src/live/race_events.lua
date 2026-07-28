@@ -151,7 +151,9 @@ do
   end
 
   function race_events.recent(state)
-    return contracts.copy(state.events or {})
+    -- Events are immutable proxies; returning the bounded collection preserves
+    -- their read-only contract without attempting to copy proxy internals.
+    return state.events or {}
   end
 
   namespace.live.race_events = race_events

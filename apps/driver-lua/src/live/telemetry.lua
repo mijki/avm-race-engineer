@@ -10,6 +10,7 @@ do
   local status_builder = namespace.live.status_builder
   local source_health = namespace.live.source_health
   local race_events = namespace.live.race_events
+  local pit_learning = namespace.live.pit_learning
   local telemetry = {}
 
   local function push_bounded(list, value, maximum)
@@ -41,6 +42,10 @@ do
       recent_events = {},
       discontinuities = {},
       pit_source = {},
+      pit = pit_learning.new(config),
+      pit_marker = nil,
+      pit_marker_dirty = false,
+      pit_diagnostics = {},
       identity = nil,
       lap = lap_tracker.new(),
       stint = stint_tracker.new(),
@@ -73,12 +78,20 @@ do
     state.event_stream = race_events.new({ max_events = namespace.config.max_events or 128 })
     state.snapshot_history = {}
     state.recent_events = {}
+    state.pit = pit_learning.new(namespace.config)
+    state.pit_marker = nil
     if mode == "mock" then csp.set_mock_fixture(mock_fixture) else csp.clear_mock_fixture() end
     return true
   end
 
   function telemetry.set_calibration(state, calibration)
     state.calibration = calibration
+  end
+
+  function telemetry.set_pit_marker(state, marker)
+    state.pit_marker = marker
+    pit_learning.set_marker(state.pit, marker, state.latest)
+    state.pit_marker_dirty = false
   end
 
   local function enrich_identity(snapshot)
@@ -172,11 +185,13 @@ do
   end
 
   local function derive(state, now_s, config)
+    local calibration = state.calibration
+    if calibration == nil then calibration = pit_learning.calibration(state.pit, state.latest) end
     state.calculation = calculations.compute({
       snapshot = state.latest,
       stint = state.stint,
       store = state.samples,
-      calibration = state.calibration,
+      calibration = calibration,
       config = config,
       now_s = now_s,
       weather = state.weather_current,
@@ -265,6 +280,17 @@ do
     end
     state.latest = snapshot
     state.identity = snapshot.identity
+    local track_layout_key = namespace.contracts.track_layout_key(snapshot.identity)
+    if state.pit_marker == nil or state.pit_marker.track_layout_key ~= track_layout_key then
+      local marker = state.pit_marker
+      if marker == nil or marker.track_layout_key ~= track_layout_key then marker = nil end
+      pit_learning.set_marker(state.pit, marker, snapshot)
+      state.pit_marker = state.pit.marker
+    end
+    pit_learning.update(state.pit, snapshot, now_s)
+    state.pit_marker = state.pit.marker
+    state.pit_diagnostics = pit_learning.diagnostics(state.pit, snapshot)
+    state.pit_marker_dirty = state.pit.marker_dirty == true
     state.pit_source = {
       isInPitlane = snapshot.car and snapshot.car.pit_lane,
       isInPit = snapshot.car and snapshot.car.pit_box,
