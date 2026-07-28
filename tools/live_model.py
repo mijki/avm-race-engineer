@@ -176,6 +176,9 @@ def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") 
     car = section("car")
     tyres = section("tyres")
     environment = section("environment")
+    normalized_session = {key: session.get(key) for key in ("type", "elapsed_s", "remaining_s", "lap_limit", "completed_laps", "race_lap", "current_lap", "position", "total_cars", "track_length_m", "paused", "replay", "active", "finished")}
+    if normalized_session["race_lap"] is None:
+        normalized_session["race_lap"] = normalized_session["completed_laps"]
     snapshot = {
         "schema_version": SCHEMA_VERSIONS["telemetry_snapshot"],
         "snapshot_id": raw.get("snapshot_id") or race_snapshot_id(identity, int(raw.get("sequence") or 0)),
@@ -184,7 +187,7 @@ def normalize_csp(raw: dict[str, Any], now_s: float, source_mode: str = "live") 
         "source_timestamp_s": raw.get("source_timestamp_s", now_s),
         "sequence": int(raw.get("sequence") or 0),
         "identity": {key: identity.get(key) for key in ("car_id", "track_id", "layout_id", "driver_name", "session_id", "configuration_id")},
-        "session": {key: session.get(key) for key in ("type", "elapsed_s", "remaining_s", "lap_limit", "completed_laps", "current_lap", "position", "total_cars", "track_length_m", "paused", "replay", "active", "finished")},
+        "session": normalized_session,
         "car": {key: car.get(key) for key in ("speed_kmh", "fuel_l", "fuel_capacity_l", "spline", "distance_session_km", "pit_lane", "pit_box", "lap_time_s", "previous_lap_time_s", "best_lap_time_s", "lap_valid", "previous_lap_valid", "last_lap_cuts", "reset_counter")},
         "tyres": {key: tyres.get(key) for key in ("compound", "core_c", "surface_c", "wear", "pressure_kpa", "optimum_c", "wheels")},
         "environment": {key: environment.get(key) for key in ("ambient_c", "road_c", "wind_kmh", "weather_type", "rain_intensity", "track_wetness", "standing_water", "grip")},
@@ -346,7 +349,7 @@ class LapTracker:
                 delta = car["distance_session_km"] - self.lap_start_distance_km
                 if 0 < delta < 100:
                     distance = delta
-            event = {"lap_number": previous_count, "lap_time_s": car.get("previous_lap_time_s"), "fuel_used_l": fuel_used, "distance_km": distance, "accepted": reason is None, "reason": reason, "regime": reason or "green_valid"}
+            event = {"lap_number": previous_count, "lap_time_s": car.get("previous_lap_time_s"), "fuel_used_l": fuel_used, "distance_km": distance, "accepted": reason is None, "reason": reason, "regime": reason or "green_valid", "incomplete": current_count - previous_count != 1}
             self.out_lap_pending = False
             self.lap_start_fuel_l = car.get("fuel_l")
             self.lap_start_distance_km = car.get("distance_session_km")
@@ -362,12 +365,59 @@ class StintTracker:
     start_monotonic_s: float | None = None
     start_fuel_l: float | None = None
     start_lap: int | None = None
+    stint_id: str | None = None
+    stint_number: int = 0
     completed_laps: int = 0
+    current_stint_lap: int = 0
     identity: str | None = None
     previous: dict[str, Any] | None = None
+    previous_stint: dict[str, Any] | None = None
+    stint_history: list[dict[str, Any]] = field(default_factory=list)
+    awaiting_boundary: bool = False
     end_reason: str | None = None
 
-    def update(self, snapshot: dict[str, Any], now_s: float, fuel_jump_l: float = 1.0) -> None:
+    def reset(self, reason: str | None = None) -> None:
+        identity = self.identity
+        self.__init__()
+        self.identity = identity
+        self.end_reason = reason
+
+    def _archive_current(self, now_s: float, reason: str) -> None:
+        if self.stint_number <= 0 or self.stint_id is None:
+            return
+        previous = {
+            "stint_id": self.stint_id,
+            "stint_number": self.stint_number,
+            "identity_key": self.identity,
+            "start_monotonic_s": self.start_monotonic_s,
+            "end_monotonic_s": now_s,
+            "start_lap": self.start_lap,
+            "completed_laps": self.current_stint_lap,
+            "end_reason": reason,
+        }
+        self.previous_stint = previous
+        self.stint_history.append(previous)
+        self.stint_history = self.stint_history[-4:]
+
+    def _begin(self, snapshot: dict[str, Any], now_s: float, boundary_confirmed: bool) -> None:
+        session = snapshot["session"]
+        car = snapshot["car"]
+        if boundary_confirmed:
+            self._archive_current(now_s, "PIT_EXIT_CONFIRMED")
+            self.stint_number += 1
+        elif self.stint_number == 0:
+            self.stint_number = 1
+        self.stint_id = f"stint:{self.identity or 'unknown'}:{self.stint_number}"
+        self.active = True
+        self.awaiting_boundary = False
+        self.start_monotonic_s = now_s
+        self.start_fuel_l = car.get("fuel_l")
+        self.start_lap = session.get("current_lap") or ((session.get("completed_laps") or 0) + 1)
+        self.completed_laps = 0
+        self.current_stint_lap = 0
+        self.end_reason = None
+
+    def update(self, snapshot: dict[str, Any], now_s: float, fuel_jump_l: float = 1.0, boundary_event: dict[str, Any] | None = None) -> None:
         key = identity_key(snapshot)
         session = snapshot["session"]
         car = snapshot["car"]
@@ -376,24 +426,25 @@ class StintTracker:
         self.identity = key
         previous = self.previous
         if previous and session.get("completed_laps") is not None and previous["session"].get("completed_laps") is not None and session["completed_laps"] < previous["session"]["completed_laps"]:
-            self.__init__(); self.identity = key
+            self.reset("SESSION_RESTART"); self.identity = key
         if previous and previous["session"].get("replay") != session.get("replay"):
-            self.__init__(); self.identity = key
-        if previous and isinstance(previous["car"].get("fuel_l"), (int, float)) and isinstance(car.get("fuel_l"), (int, float)) and car["fuel_l"] - previous["car"]["fuel_l"] > fuel_jump_l and not car.get("pit_lane"):
-            self.__init__(); self.identity = key
+            self.reset("REPLAY_STATE_CHANGED"); self.identity = key
         on_track = not car.get("pit_lane") and not car.get("pit_box")
         if self.active and not on_track:
-            self.active = False; self.end_reason = "PIT_ENTRY"
+            self.active = False; self.awaiting_boundary = True; self.end_reason = "PIT_ENTRY"
         if not self.active and on_track and session.get("active", True) and not session.get("finished"):
-            self.active = True
-            self.start_monotonic_s = now_s
-            self.start_fuel_l = car.get("fuel_l")
-            self.start_lap = session.get("current_lap")
-            self.completed_laps = 0
-            self.end_reason = None
+            confirmed_exit = isinstance(boundary_event, dict) and boundary_event.get("event_type") == "PIT_EXIT_CONFIRMED"
+            if self.stint_number == 0 or (self.awaiting_boundary and confirmed_exit):
+                self._begin(snapshot, now_s, self.stint_number > 0 and confirmed_exit)
         if session.get("finished"):
-            self.active = False; self.end_reason = "SESSION_END"
+            self.active = False; self.awaiting_boundary = False; self.end_reason = "SESSION_END"
         self.previous = snapshot
+
+    def record_lap(self, event: dict[str, Any]) -> None:
+        """Count a completed lap for stint progress, including out-laps."""
+        if self.active and event.get("incomplete") is not True:
+            self.current_stint_lap += 1
+            self.completed_laps = self.current_stint_lap
 
     def elapsed(self, now_s: float) -> float | None:
         return max(0, now_s - self.start_monotonic_s) if self.active and self.start_monotonic_s is not None else None
@@ -552,6 +603,15 @@ def calculate(
         },
         "tyres": {"wheels": _wheel_cells(snapshot, samples, targets)},
         "pit": {"distance": metric(distance, " m", 1, pit_reason)},
+        "stint": {
+            "stint_id": stint.stint_id,
+            "stint_number": metric(stint.stint_number, "", 0, "MEASURED_CURRENT" if stint.stint_number else "SOURCE_UNAVAILABLE"),
+            "current_stint_lap": metric(stint.current_stint_lap, " lap", stint.current_stint_lap, "MEASURED_CURRENT"),
+            "race_lap": metric(session.get("race_lap", session.get("completed_laps")), " lap", 1, "AC_COMPLETED_LAP_COUNT" if session.get("race_lap", session.get("completed_laps")) is not None else "SOURCE_UNAVAILABLE"),
+            "current_lap": metric(session.get("current_lap"), " lap", 1, "AC_CURRENT_LAP_IN_PROGRESS" if session.get("current_lap") is not None else "SOURCE_UNAVAILABLE"),
+            "previous_stint": stint.previous_stint,
+            "stint_history": list(stint.stint_history),
+        },
         "stint_elapsed_s": stint.elapsed(now_s),
         "latest_excluded": samples.latest_excluded,
         "configuration": {

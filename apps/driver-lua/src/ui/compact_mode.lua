@@ -103,7 +103,7 @@ function compact.render_text_first(vm, requested_mode, simplified)
   else
     csp.text("MODE: " .. string.upper(mode_label))
   end
-  csp.text("STINT: " .. value(vm.stint) .. " / " .. value(vm.total_stints) .. "    LAP: " .. value(vm.lap) .. " / " .. value(vm.planned_lap))
+  csp.text("STINT: " .. value(vm.stint) .. "    STINT LAP: " .. value(vm.stint_lap) .. "    RACE LAP: " .. value(vm.race_lap or vm.lap) .. " / " .. value(vm.planned_lap))
   csp.text("TIME: ELAPSED: " .. value(vm.timing.elapsed) .. "    REMAINING: " .. value(vm.timing.remaining))
   csp.text("TARGET STINT: " .. value(vm.timing.target))
   csp.text("FUEL: STATUS: " .. value(vm.fuel.current) .. "    RANGE: " .. value(vm.fuel.range))

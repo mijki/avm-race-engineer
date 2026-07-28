@@ -120,6 +120,7 @@ do
       track_length_m = nil,
       latest_observation = nil,
       latest_rejection = nil,
+      last_confirmed_exit = nil,
     }
   end
 
@@ -298,7 +299,8 @@ do
     local accepted, rejection = update_marker(state, snapshot, kind, now_s, observation)
     observation.confirmation_state = accepted and "CONFIRMED" or "REJECTED"
     state.candidate = nil
-    event(state, snapshot, kind == "ENTRY" and (accepted and "PIT_ENTRY_CONFIRMED" or "PIT_ENTRY_REJECTED") or (accepted and "PIT_EXIT_CONFIRMED" or "PIT_EXIT_REJECTED"), { observation = observation, marker_state = state.marker and state.marker.state }, accepted and "high" or "low", rejection, state.suppress_reason)
+    local emitted = event(state, snapshot, kind == "ENTRY" and (accepted and "PIT_ENTRY_CONFIRMED" or "PIT_ENTRY_REJECTED") or (accepted and "PIT_EXIT_CONFIRMED" or "PIT_EXIT_REJECTED"), { observation = observation, marker_state = state.marker and state.marker.state }, accepted and "high" or "low", rejection, state.suppress_reason)
+    if kind == "EXIT" and accepted then state.last_confirmed_exit = emitted end
     return accepted
   end
 
@@ -336,6 +338,7 @@ do
 
   function pit_learning.update(state, snapshot, now_s)
     if type(snapshot) ~= "table" then return state end
+    state.last_confirmed_exit = nil
     local current_car = car(snapshot)
     local previous = state.previous
     local previous_car = car(previous)
@@ -475,6 +478,7 @@ do
       distance_reason = distance_reason,
       latest_observation = state.latest_observation,
       latest_rejection = state.latest_rejection,
+      last_confirmed_exit = state.last_confirmed_exit,
       current_visit = state.visit,
       last_visit = state.last_visit,
       suppress_reason = state.suppress_reason,

@@ -129,7 +129,7 @@ end
 function expanded.render_text_first(vm)
   csp.text("AVM PitWall")
   csp.text("MODE: Expanded")
-  csp.text("STINT: " .. value(vm.stint) .. " / " .. value(vm.total_stints) .. "    LAP: " .. value(vm.lap) .. " / " .. value(vm.planned_lap))
+  csp.text("STINT: " .. value(vm.stint) .. "    STINT LAP: " .. value(vm.stint_lap) .. "    RACE LAP: " .. value(vm.race_lap or vm.lap) .. " / " .. value(vm.planned_lap))
   csp.text("TIME: Elapsed: " .. value(vm.timing.elapsed) .. "    Remaining: " .. value(vm.timing.remaining) .. "    Target: " .. value(vm.timing.target))
   csp.text("FUEL: Range: " .. value(vm.fuel.range) .. "    Current: " .. value(vm.fuel.current) .. "    Pit entry: " .. value(vm.fuel.expected_at_pit))
   csp.text("PACE: Status: " .. value(vm.pace.status) .. "    Delta: " .. value(vm.pace.delta) .. "    Last lap: " .. value(vm.pace.last_lap))

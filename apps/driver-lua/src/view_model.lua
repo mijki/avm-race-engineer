@@ -103,6 +103,7 @@ local function live_reduce_v2(status, mode)
   local pace = status.pace or {}
   local tyres = status.tyres or {}
   local weather = status.weather or {}
+  local stint = status.stint or {}
   local current_weather = weather.current or {}
   local future = weather.future or {}
   local diagnostics = status.diagnostics or {}
@@ -187,15 +188,21 @@ local function live_reduce_v2(status, mode)
   local wind_speed = live_number(current_weather.wind_kmh, 0, " km/h")
   local wind_direction = current_weather.wind_cardinal or formatting.cardinal_direction(current_weather.wind_direction_deg, nil)
   local wind = wind_direction and wind_speed .. " · " .. wind_direction or (current_weather.wind_kmh and wind_speed or "Wind unavailable")
-  local context = status.stint and status.stint.current_lap and live_metric(status.stint.current_lap, 0) or "--"
-  local elapsed_context = live_duration(status.stint and status.stint.elapsed)
-  local remaining_context = live_duration(status.stint and status.stint.remaining)
-  local remaining_estimated = status.stint and status.stint.remaining and status.stint.remaining.value ~= nil and status.stint.remaining.reason ~= "session time"
+  local stint_number = stint.stint_number
+  local current_stint_lap = stint.current_stint_lap
+  local race_lap = stint.race_lap or status.session and status.session.completed_laps
+  local context = current_stint_lap and live_metric(current_stint_lap, 0) or "--"
+  local elapsed_context = live_duration(stint.elapsed)
+  local remaining_context = live_duration(stint.remaining)
+  local remaining_estimated = stint.remaining and stint.remaining.value ~= nil and stint.remaining.reason ~= "session time"
   local header_parts = {}
-  if status.stint and status.stint.current_lap and status.stint.current_lap.value ~= nil then
-    header_parts[#header_parts + 1] = "STINT " .. formatting.number(status.stint.current_lap.value, 0, "")
+  if stint_number and stint_number.value ~= nil then
+    header_parts[#header_parts + 1] = "STINT " .. formatting.number(stint_number.value, 0, "")
   end
-  if session.current_lap then header_parts[#header_parts + 1] = "LAP " .. tostring(session.current_lap) end
+  if current_stint_lap and current_stint_lap.value ~= nil then
+    header_parts[#header_parts + 1] = "STINT LAP " .. formatting.number(current_stint_lap.value, 0, "")
+  end
+  if race_lap and race_lap.value ~= nil then header_parts[#header_parts + 1] = "RACE LAP " .. formatting.number(race_lap.value, 0, "") end
   if elapsed_context ~= "--:--" then header_parts[#header_parts + 1] = elapsed_context end
   if remaining_context ~= "--:--" then header_parts[#header_parts + 1] = remaining_context .. (remaining_estimated and "~" or "") end
   if session.remaining_s then header_parts[#header_parts + 1] = formatting.time(session.remaining_s) .. " LEFT" end
@@ -210,9 +217,10 @@ local function live_reduce_v2(status, mode)
     build_name = namespace.config.build_name,
     session_name = formatting.session_type(session.type),
     scenario_id = source.mode == "mock" and "MOCK" or "LIVE",
-    lap = session.current_lap and tostring(session.current_lap) or "--",
+    lap = race_lap and live_metric(race_lap, 0) or "--",
+    race_lap = race_lap and live_metric(race_lap, 0) or "--",
     planned_lap = session.lap_limit and tostring(session.lap_limit) or "--",
-    stint = live_metric(status.stint and status.stint.completed_laps, 0),
+    stint = live_metric(stint_number, 0),
     stint_lap = context,
     total_stints = "--",
     progress = progress,
@@ -345,7 +353,7 @@ local function live_reduce_v2(status, mode)
     },
     header = {
       session = formatting.session_type(session.type),
-      lap = session.current_lap and ("LAP " .. tostring(session.current_lap)) or "LAP --",
+      lap = race_lap and ("RACE LAP " .. live_metric(race_lap, 0)) or "RACE LAP --",
       position = session.position and session.total_cars and (tostring(session.position) .. "/" .. tostring(session.total_cars)) or "--",
       source = source_label,
       source_mode = source.mode,
@@ -415,7 +423,8 @@ local function live_reduce(status, mode)
   local alert = status.alerts and status.alerts[1] or nil
   local availability = source.availability or (source.mode == "live" and "live" or source.mode == "mock" and "partial" or "unavailable")
   local state = availability
-  local progress_metric = status.stint and status.stint.progress or nil
+  local stint = status.stint or {}
+  local progress_metric = stint.progress
   local progress = progress_metric and progress_metric.value or nil
   local source_labels = { live = "LIVE", partial = "PARTIAL", stale = "STALE", unavailable = "OFFLINE", mock = "MOCK" }
   local source_label = source_labels[availability] or "OFFLINE"
@@ -450,9 +459,11 @@ local function live_reduce(status, mode)
     build_name = namespace.config.build_name,
     session_name = formatting.session_type(session.type),
     scenario_id = source.mode == "mock" and "MOCK" or "LIVE",
-    lap = session.current_lap and ("" .. tostring(session.current_lap)) or "--",
+    lap = stint.race_lap and live_metric(stint.race_lap, 0) or "--",
+    race_lap = stint.race_lap and live_metric(stint.race_lap, 0) or "--",
     planned_lap = session.lap_limit and ("" .. tostring(session.lap_limit)) or "--",
-    stint = live_metric(status.stint and status.stint.completed_laps, 0),
+    stint = live_metric(stint.stint_number, 0),
+    stint_lap = stint.current_stint_lap and live_metric(stint.current_stint_lap, 0) or "--",
     total_stints = "--",
     progress = progress or 0,
     connection_state = state,
@@ -563,7 +574,7 @@ local function live_reduce(status, mode)
     },
     header = {
       session = formatting.session_type(session.type),
-      lap = session.current_lap and ("Lap " .. tostring(session.current_lap)) or "Lap --",
+      lap = stint.race_lap and ("Race lap " .. live_metric(stint.race_lap, 0)) or "Race lap --",
       position = session.position and (tostring(session.position) .. "/" .. tostring(session.total_cars or "?")) or "--",
       source = source_label,
       source_mode = source.mode,

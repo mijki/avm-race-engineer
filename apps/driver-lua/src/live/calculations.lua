@@ -245,17 +245,28 @@ do
     local elapsed_s = namespace.live.stint_tracker.elapsed(stint, now_s)
     local stint_progress = nil
     if elapsed_s and remaining_s and elapsed_s + remaining_s > 0 then stint_progress = elapsed_s / (elapsed_s + remaining_s) end
-    local current_stint_lap = nil
-    if type(stint.start_lap) == "number" and type(session.current_lap) == "number" then current_stint_lap = math.max(1, session.current_lap - stint.start_lap + 1) end
+    -- AC current_lap is the one-based lap currently in progress. Stint and
+    -- race progress below are completed-lap counters and must not be derived
+    -- from that in-progress value.
+    local current_stint_lap = type(stint.current_stint_lap) == "number" and stint.current_stint_lap or stint.completed_laps
+    local race_lap = session.completed_laps
     local weather = input.weather or {}
     local weather_trend = input.weather_trend or { label = "UNKNOWN", text = "Measured trend: Unavailable" }
     local fresh_reason = observed_age and observed_age <= 2 and "MEASURED_CURRENT" or "STALE_TELEMETRY"
     local wheels = build_wheels(tyres, store, config)
     local result = {
       stint = {
+        stint_id = stint.stint_id,
+        stint_number = numeric_metric(stint.stint_number, "", 0, observed_age, nil, stint.stint_number and "MEASURED_CURRENT" or "SOURCE_UNAVAILABLE"),
         elapsed = numeric_metric(elapsed_s, " s", 1, observed_age, nil, elapsed_s and "MEASURED_CURRENT" or "SOURCE_UNAVAILABLE"),
         completed_laps = numeric_metric(stint.completed_laps, " laps", stint.completed_laps or 0, observed_age, nil, "MEASURED_CURRENT"),
-        current_lap = numeric_metric(current_stint_lap, " lap", stint.completed_laps or 0, observed_age, nil, current_stint_lap and "MEASURED_CURRENT" or "INSUFFICIENT_SAMPLES"),
+        -- current_lap remains the AC active/in-progress lap for diagnostics;
+        -- current_stint_lap is the completed progress value used by the HUD.
+        current_lap = numeric_metric(session.current_lap, " lap", 1, observed_age, nil, session.current_lap and "AC_CURRENT_LAP_IN_PROGRESS" or "SOURCE_UNAVAILABLE"),
+        current_stint_lap = numeric_metric(current_stint_lap, " lap", stint.completed_laps or 0, observed_age, nil, current_stint_lap ~= nil and "MEASURED_CURRENT" or "SOURCE_UNAVAILABLE"),
+        race_lap = numeric_metric(race_lap, " lap", 1, observed_age, nil, race_lap ~= nil and "AC_COMPLETED_LAP_COUNT" or "SOURCE_UNAVAILABLE"),
+        previous_stint = stint.previous_stint,
+        stint_history = stint.stint_history,
         remaining = numeric_metric(remaining_s, " s", #remaining, observed_age, nil, remaining_s and remaining_reason or "NO_TRUSTWORTHY_CONSTRAINT"),
         endpoint = numeric_metric(elapsed_s and remaining_s and elapsed_s + remaining_s or nil, " s", #remaining, observed_age, nil, remaining_s and remaining_reason or "NO_TRUSTWORTHY_CONSTRAINT"),
         progress = numeric_metric(stint_progress, "", #remaining, observed_age, nil, stint_progress and "MEASURED_CURRENT" or "INSUFFICIENT_SAMPLES"),

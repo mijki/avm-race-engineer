@@ -768,6 +768,7 @@ function csp.normalize(raw, observed_monotonic_s, source_mode)
       lap_limit = session.lap_limit,
       track_length_m = session.track_length_m,
       completed_laps = session.completed_laps,
+      race_lap = session.race_lap or session.completed_laps,
       current_lap = session.current_lap,
       position = session.position,
       total_cars = session.total_cars,
@@ -1006,6 +1007,10 @@ local function read_live_telemetry()
   end
   local sim_time_ms = telemetry_field(sim, "time")
   local lap_count = telemetry_field(car, "lapCount")
+  -- AC/CSP lapCount is the number of completed laps. The active lap is the
+  -- following one, so keep both meanings explicit at the adapter boundary.
+  local completed_lap_count = lap_count
+  local ac_current_lap = type(completed_lap_count) == "number" and completed_lap_count + 1 or nil
   local lap_time_ms = telemetry_field(car, "lapTimeMs")
   local previous_lap_time_ms = telemetry_field(car, "previousLapTimeMs")
   local best_lap_time_ms = telemetry_field(car, "bestLapTimeMs")
@@ -1032,8 +1037,9 @@ local function read_live_telemetry()
       remaining_s = milliseconds(session_time_left_ms),
       lap_limit = telemetry_field(session, "laps"),
       track_length_m = telemetry_field(sim, "trackLengthM"),
-      completed_laps = lap_count,
-      current_lap = type(lap_count) == "number" and lap_count + 1 or nil,
+      completed_laps = completed_lap_count,
+      race_lap = completed_lap_count,
+      current_lap = ac_current_lap,
       position = telemetry_field(car, "racePosition"),
       total_cars = telemetry_field(sim, "carsCount"),
       paused = telemetry_field(sim, "isPaused"),

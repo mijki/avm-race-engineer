@@ -156,7 +156,7 @@ do
       health = { telemetry = "unavailable", bridge = "NOT_USED", engineer = "NOT_ASSIGNED" },
       identity = {},
       session = {}, car = {},
-      stint = { elapsed = unavailable, completed_laps = unavailable, remaining = unavailable, endpoint = unavailable, progress = unavailable },
+      stint = { stint_number = unavailable, current_stint_lap = unavailable, race_lap = unavailable, elapsed = unavailable, completed_laps = unavailable, remaining = unavailable, endpoint = unavailable, progress = unavailable },
       fuel = { current = unavailable, used_stint = unavailable, per_lap = unavailable, per_km = unavailable, per_min = unavailable, laps_remaining = unavailable, time_remaining = unavailable, distance_remaining = unavailable, predicted_at_pit = unavailable, delta_target = unavailable },
       pace = { current = unavailable, previous_representative = unavailable, rolling = unavailable, delta = unavailable },
       tyres = { compound = nil, core_c = unavailable, surface_c = unavailable, wear = unavailable, pressure_kpa = unavailable, state = "UNKNOWN" },

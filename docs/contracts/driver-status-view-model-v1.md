@@ -32,6 +32,12 @@ laps in the active stint. The view model therefore exposes a diagnostic-safe
 label such as `STINT 2 · LAP 0`, then `STINT 2 · LAP 1`; it never parses that
 label to recover a stint number.
 
+The live CSP path keeps AC's one-based `current_lap` (the lap in progress)
+separate from `completed_laps`. `race_lap` is sourced from the completed count,
+so a pit stop does not reset it. The live view model exposes the three values as
+`stint_number`, `current_stint_lap`, and `race_lap`; the renderer only formats
+those fields.
+
 ## Tyres, weather, and pit
 
 Tyres always have independent `FL`, `FR`, `RL`, and `RR` cells. Measured

@@ -13,7 +13,7 @@ values as `nil`, and emits normalized fields consumed by the live model.
 | `ac.getCar(0).resetCounter` | `car.reset_counter` | integer | yes | unavailable |
 | `ac.getCar(0).speedKmh` | `car.speed_kmh` | number, km/h | core | unavailable |
 | `ac.getCar(0).fuel` | `car.fuel_l` | number, litres | core | unavailable |
-| `ac.getCar(0).lapCount` | `session.completed_laps` | integer | core | unavailable |
+| `ac.getCar(0).lapCount` | `session.completed_laps`, `session.race_lap` | integer, completed laps | core | unavailable |
 | `ac.getCar(0).lapTimeMs` | `car.lap_time_s` | number, seconds | core | unavailable |
 | `ac.getCar(0).isLapValid` | `car.lap_valid` | boolean | yes | unavailable |
 | `ac.getSim().currentSessionTime` | `session.elapsed_s` | number, seconds | core | `gameTime` if verified |
@@ -26,6 +26,11 @@ values as `nil`, and emits normalized fields consumed by the live model.
 | `ac.getSim().rainWetness` | `environment.track_wetness` | number, 0..1 | yes | unavailable |
 | `ac.getSim().roadGrip` | `environment.grip` | number, CSP scale | yes | unavailable |
 | wheel tyre members | `tyres.wheels[FL..RR]` | independent values | yes | unavailable per wheel |
+
+`session.current_lap` is the one-based AC lap currently in progress and is
+derived as `completed_laps + 1` at the adapter boundary. `session.race_lap`
+remains the completed race/session count; downstream stint progress and the
+driver HUD must not substitute the active-lap value for it.
 
 The adapter records member type, protected-call result, first failure,
 normalization rejection, and missing optional fields in bounded diagnostics.

@@ -15,6 +15,8 @@ Material refuel plus its later pit exit is one pit-cycle boundary. Reset,
 teleport, and minor discontinuity evidence do not start a stint; they only
 affect lap eligibility. Pause/resume events pause live progress without
 deleting history; an incomplete current lap is simply not an accepted sample.
+Pit-exit candidates and lane/box transition events are evidence only; the
+ordinal advances only when the boundary is confirmed.
 Every assigned completed lap receives a stable
 `stint_id`, `stint_number`, and one-based `stint_lap_number`.
 

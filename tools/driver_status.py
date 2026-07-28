@@ -364,12 +364,13 @@ class DriverStatusViewModel:
         stint_number = progress.get("stint_number")
         completed = progress.get("completed_stint_laps")
         current_lap = progress.get("current_stint_lap_zero_based", completed)
+        race_lap = _snapshot_value(snapshot, "race_lap", "completed_laps")
         if current_lap is None and completed is not None:
             current_lap = completed
         fields["stint.current_stint_number"] = _field("stint.current_stint_number", "STINT", stint_number, metric={"value": stint_number}, unit="", formatter=lambda value: f"STINT {int(value)}" if _number(value) is not None else UNAVAILABLE, source_layer="calculation")
         fields["stint.current_stint_lap"] = _field("stint.current_stint_lap", "STINT LAP", current_lap, metric={"value": current_lap}, unit="", formatter=lambda value: f"LAP {int(value)}" if _number(value) is not None else UNAVAILABLE, source_layer="calculation")
         fields["stint.completed_laps"] = _field("stint.completed_laps", "COMPLETED STINT LAPS", completed, metric={"value": completed}, unit="laps", formatter=lambda value: format_number(value, "laps", 0), source_layer="calculation")
-        fields["stint.current_race_lap"] = _field("stint.current_race_lap", "RACE LAP", _snapshot_value(snapshot, "current_lap", "lap_number"), metric={"value": _snapshot_value(snapshot, "current_lap", "lap_number")}, unit="", formatter=lambda value: f"LAP {int(value)}" if _number(value) is not None else UNAVAILABLE, source_layer="telemetry")
+        fields["stint.current_race_lap"] = _field("stint.current_race_lap", "RACE LAP", race_lap, metric={"value": race_lap}, unit="", formatter=lambda value: f"LAP {int(value)}" if _number(value) is not None else UNAVAILABLE, source_layer="telemetry")
         fields["stint.elapsed_time"] = _field("stint.elapsed_time", "STINT ELAPSED", progress.get("elapsed_stint_time_s"), metric={"value": progress.get("elapsed_stint_time_s")}, formatter=format_duration, source_layer="calculation")
         fields["stint.remaining_time"] = _metric_field("stint.remaining_time", "REMAINING TIME", stint.get("remaining_stint_time"), unit="s", formatter=format_duration, source_layer="forecast")
         fields["stint.remaining_laps"] = _metric_field("stint.remaining_laps", "REMAINING LAPS", stint.get("remaining_stint_laps"), unit="laps", formatter=lambda value: format_number(value, "laps", 1), source_layer="forecast")
@@ -380,7 +381,7 @@ class DriverStatusViewModel:
             previous_summary = {"stint_id": previous.get("stint_id"), "stint_number": previous.get("stint_number"), "completed_laps": previous.get("completed_laps", len(previous.get("lap_ids", []))), "pace_s": previous.get("operational_pace_average_s"), "fuel_l_per_lap": previous.get("operational_fuel_average_l")}
         fields["stint.previous_summary"] = _field("stint.previous_summary", "PREVIOUS STINT", previous_summary, metric={"value": previous_summary, "unavailable_reason": None if previous_summary else "NO_PREVIOUS_STINT"}, source_layer="calculation")
         label = f"STINT {int(stint_number)} · LAP {int(current_lap)}" if _number(stint_number) is not None and _number(current_lap) is not None else None
-        return {"stint_id": stint_id, "stint_number": stint_number, "current_stint_lap": current_lap, "completed_laps": completed, "current_race_lap": _snapshot_value(snapshot, "current_lap", "lap_number"), "previous_summary": previous_summary, "strip_label": label, "binding_constraint": stint.get("binding_constraint")}
+        return {"stint_id": stint_id, "stint_number": stint_number, "current_stint_lap": current_lap, "completed_laps": completed, "race_lap": race_lap, "current_race_lap": race_lap, "previous_summary": previous_summary, "strip_label": label, "binding_constraint": stint.get("binding_constraint")}
 
     def _tyres(self, calculation: Mapping[str, Any], snapshot: Mapping[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
         tyres = _mapping(calculation.get("tyres"))

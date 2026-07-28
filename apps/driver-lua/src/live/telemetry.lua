@@ -303,12 +303,15 @@ do
       identity_key = namespace.contracts.identity_key(snapshot.identity),
     }
     local lap_event = lap_tracker.update(state.lap, snapshot)
-    stint_tracker.update(state.stint, snapshot, now_s, config.refuel_jump_l)
+    -- A new stint begins only after pit-learning confirms the exit transition;
+    -- returning on track alone is still a candidate and must not increment the
+    -- stable stint ordinal.
+    stint_tracker.update(state.stint, snapshot, now_s, config.refuel_jump_l, state.pit.last_confirmed_exit)
     if lap_event then
       store_api.record_lap(state.samples, lap_event)
-      if lap_event.accepted then
-        stint_tracker.accept_lap(state.stint, lap_event)
-      end
+      -- Stint progress counts the completed lap even when the lap is excluded
+      -- from pace/fuel samples (notably the first out-lap after a pit stop).
+      stint_tracker.accept_lap(state.stint, lap_event)
     end
     store_api.update_tyre_lap(state.samples, snapshot)
     if state.last_weather_s == nil or now_s - state.last_weather_s >= config.weather_update_period_s then

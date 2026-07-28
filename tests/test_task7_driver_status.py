@@ -45,12 +45,12 @@ def lap(number: int, *, pace: bool = True, fuel_ok: bool = True) -> dict:
     }
 
 
-def snapshot(*, current_lap: int = 3, pit_lane: bool = False) -> dict:
+def snapshot(*, current_lap: int = 3, completed_laps: int | None = None, pit_lane: bool = False) -> dict:
     return {
         "schema_version": "telemetry-snapshot-v1",
         "snapshot_id": "snapshot-3",
         "identity": {"car_id": "car", "track_id": "track", "layout_id": "main", "session_id": "session", "driver_id": "driver", "configuration_id": "cfg"},
-        "session": {"current_lap": current_lap, "lap_limit": 40},
+        "session": {"current_lap": current_lap, "completed_laps": current_lap if completed_laps is None else completed_laps, "lap_limit": 40},
         "car": {"fuel_l": 30, "pit_lane": pit_lane, "pit_box": False, "compound": "MEDIUM", "tyres": {"wheels": {
             "FL": {"temperature_c": 105, "pressure_psi": 27.7, "wear": 0.75},
             "FR": {"temperature_c": 106, "pressure_psi": 27.8, "wear": 0.75},
@@ -63,7 +63,7 @@ def snapshot(*, current_lap: int = 3, pit_lane: bool = False) -> dict:
 
 def state(*, target: bool = True, excluded_latest: bool = False, empty_post_pit: bool = False):
     laps = [lap(1), lap(2, pace=not excluded_latest, fuel_ok=not excluded_latest)]
-    events = [{"event_type": "PIT_EXIT_CANDIDATE", "event_id": "pit-exit", "detection_time_s": 250}] if empty_post_pit else []
+    events = [{"event_type": "PIT_EXIT_CONFIRMED", "event_id": "pit-exit", "detection_time_s": 250}] if empty_post_pit else []
     snap = snapshot(current_lap=3)
     calc = StintCalculationEngine({"active_regime": "DRY", "pace_target_s": 92 if target else None, "fuel_target_l": 2.4, "now_s": 300}).calculate(laps, events, current_snapshot=snap)
     forecast = ForecastEngine({"race_lap_limit": 40, "track_length_m": 5000, "reserve_fuel_l": 2, "planned_pit_lap": 10, "now_s": 300, "pit_marker": {"state": "CONFIRMED", "entry_spline": 0.1}}).calculate(calc, current_snapshot=snap, pit_diagnostics={"marker": {"state": "CONFIRMED", "entry_spline": 0.1}})
@@ -124,6 +124,14 @@ class DriverStatusTests(unittest.TestCase):
         self.assertEqual(result["stint"]["current_stint_lap"], 0)
         self.assertEqual(result["stint"]["strip_label"], "STINT 2 · LAP 0")
         self.assertIsNotNone(result["stint"]["previous_summary"])
+
+    def test_race_lap_uses_completed_ac_count_not_active_current_lap(self):
+        calc, forecast, _ = state()
+        snap = snapshot(current_lap=4, completed_laps=3)
+        result = build_driver_status(calc, forecast, snapshot=snap)
+        self.assertEqual(result["stint"]["race_lap"], 3)
+        self.assertEqual(result["stint"]["current_race_lap"], 3)
+        self.assertEqual(result["fields"]["stint.current_race_lap"]["raw_value"], 3)
 
     def test_four_independent_tyres_and_unsupported_damage(self):
         calc, forecast, snap = state()

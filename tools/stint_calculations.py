@@ -208,7 +208,7 @@ def _boundary_reason(event: Mapping[str, Any], config: StintCalculationConfig) -
     payload = _mapping(event.get("payload"))
     if kind in {"STINT_STARTED", "DRIVER_DEFINED_STINT_START", "STINT_BOUNDARY", "SESSION_RESTART", "RESTART"}:
         return "EXPLICIT_STINT_BOUNDARY"
-    if kind in {"PIT_EXIT_CANDIDATE", "PIT_EXIT_CONFIRMED", "PIT_LANE_EXITED", "PIT_EXITED", "PIT_BOX_DEPARTURE"}:
+    if kind == "PIT_EXIT_CONFIRMED":
         return "PIT_CYCLE_EXIT"
     if kind == "REFUEL" and (_number(_first(payload, "delta_l", "refuel_l", "amount_l")) or 0.0) >= config.refuel_boundary_l:
         return "MATERIAL_REFUEL"

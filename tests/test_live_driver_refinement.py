@@ -226,7 +226,7 @@ class CalibrationIndicatorDocumentationTests(unittest.TestCase):
         self.assertIn("pressure_delta_threshold_psi", config)
         self.assertIn("temperature_delta_threshold_c", config)
         self.assertIn("local function metric_tone", view_model)
-        self.assertIn('"LAP " .. tostring(session.current_lap)', view_model)
+        self.assertIn('"RACE LAP " .. live_metric(race_lap, 0)', view_model)
         self.assertIn('return "neutral"', view_model)
         self.assertIn('return "critical"', view_model)
 

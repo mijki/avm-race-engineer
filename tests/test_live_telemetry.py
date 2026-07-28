@@ -29,6 +29,65 @@ def fixture(name: str, now: float = 10.0) -> dict:
 
 
 class LiveTelemetryTests(unittest.TestCase):
+    def test_stint_ordinal_current_stint_lap_and_race_lap_follow_confirmed_boundary(self) -> None:
+        def snapshot(completed_laps: int, *, pit_lane: bool = False, now: float = 0.0) -> dict:
+            result = fixture("live_telemetry_a.json", now)
+            result["session"]["completed_laps"] = completed_laps
+            result["session"]["race_lap"] = completed_laps
+            result["session"]["current_lap"] = completed_laps + 1
+            result["car"]["pit_lane"] = pit_lane
+            result["car"]["pit_box"] = pit_lane
+            return result
+
+        def progress(current: dict, tracker: StintTracker, now: float) -> tuple[int, int, int]:
+            calculated = calculate(current, tracker, SampleStore(), None, now)
+            return tuple(calculated["stint"][name]["value"] for name in ("stint_number", "current_stint_lap", "race_lap"))
+
+        tracker = StintTracker()
+        first = snapshot(0)
+        tracker.update(first, 0)
+        for completed_laps in (1, 2, 3):
+            current = snapshot(completed_laps, now=completed_laps * 10)
+            tracker.update(current, completed_laps * 10)
+            tracker.record_lap({"incomplete": False, "accepted": True})
+        self.assertEqual(progress(current, tracker, 30), (1, 3, 3))
+
+        pit_entry = snapshot(3, pit_lane=True, now=31)
+        tracker.update(pit_entry, 31)
+        self.assertEqual(progress(pit_entry, tracker, 31), (1, 3, 3))
+
+        unconfirmed_exit = snapshot(3, now=32)
+        tracker.update(unconfirmed_exit, 32)
+        self.assertFalse(tracker.active)
+        self.assertEqual(progress(unconfirmed_exit, tracker, 32), (1, 3, 3))
+
+        confirmed_exit = snapshot(3, now=32.2)
+        tracker.update(confirmed_exit, 32.2, boundary_event={"event_type": "PIT_EXIT_CONFIRMED"})
+        self.assertEqual(progress(confirmed_exit, tracker, 32.2), (2, 0, 3))
+        self.assertEqual(tracker.previous_stint["stint_number"], 1)
+        self.assertEqual(tracker.previous_stint["completed_laps"], 3)
+        self.assertEqual(len(tracker.stint_history), 1)
+
+        for completed_laps in (4, 5):
+            current = snapshot(completed_laps, now=completed_laps * 10)
+            tracker.update(current, completed_laps * 10)
+            tracker.record_lap({"incomplete": False, "accepted": completed_laps == 5, "reason": None if completed_laps == 5 else "OUT_LAP_EXCLUDED"})
+            self.assertEqual(progress(current, tracker, completed_laps * 10), (2, completed_laps - 3, completed_laps))
+
+    def test_ac_current_lap_is_not_used_as_completed_race_lap(self) -> None:
+        snapshot = fixture("live_telemetry_a.json")
+        snapshot["session"]["completed_laps"] = 3
+        snapshot["session"]["race_lap"] = 3
+        snapshot["session"]["current_lap"] = 4
+        normalized = normalize_csp(snapshot, 10.0)
+        self.assertEqual(normalized["session"]["race_lap"], 3)
+        self.assertEqual(normalized["session"]["current_lap"], 4)
+
+        view_model = (ROOT / "apps" / "driver-lua" / "src" / "view_model.lua").read_text(encoding="utf-8")
+        self.assertIn("stint = live_metric(stint_number, 0)", view_model)
+        self.assertNotIn("stint = live_metric(status.stint and status.stint.completed_laps", view_model)
+        self.assertIn('"RACE LAP "', view_model)
+
     def test_normalization_preserves_unavailable_as_none(self) -> None:
         snap = normalize_csp({"identity": {}, "session": {}, "car": {}, "tyres": {}, "environment": {}}, 1.0)
         self.assertIsNone(snap["car"]["fuel_l"])
