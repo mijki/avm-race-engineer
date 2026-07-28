@@ -559,6 +559,46 @@ class StintCalculationEngine:
             state["accepted_sample_counts"] = {"pace": len(historical_pace), "fuel": len(historical_fuel)}
         current_stint_id = assigned[-1]["stint_id"] if assigned else None
         current_laps = [lap for lap in assigned if lap.get("stint_id") == current_stint_id]
+
+        # A pit/refuel boundary can be observed after the last completed lap.
+        # Preserve the prior stint and mint the next stable identity now, so a
+        # live consumer can expose STINT N · LAP 0 before the first post-pit
+        # lap completes.  The one-based current_stint_lap field below remains
+        # backward compatible; the explicit zero-based field is for driver
+        # progress semantics.
+        boundaries = _boundaries(event_list, self.config)
+        last_completed_time = _number(ordered[-1].get("completed_at_s")) if ordered else None
+        last_completed_lap = _number(ordered[-1].get("lap_number")) if ordered else None
+        pending_boundary = None
+        for boundary in boundaries:
+            after_time = boundary.event_time_s is not None and last_completed_time is not None and boundary.event_time_s > last_completed_time
+            after_lap = boundary.lap_number is not None and last_completed_lap is not None and boundary.lap_number > last_completed_lap
+            if after_time or after_lap:
+                pending_boundary = boundary
+        if assigned and pending_boundary is not None:
+            identity = _identity(assigned[-1])
+            previous_number = max(int(state.get("stint_number", 0)) for state in stints.values()) if stints else 0
+            next_number = previous_number + 1
+            current_stint_id = f"stint:{identity}:{next_number}"
+            stints[current_stint_id] = {
+                "stint_id": current_stint_id,
+                "stint_number": next_number,
+                "identity_key": identity,
+                "lap_ids": [],
+                "stint_lap_numbers": [],
+                "start_time_s": pending_boundary.event_time_s,
+                "end_time_s": None,
+                "completed_laps": 0,
+                "regime": None,
+                "operational_pace_average_s": None,
+                "representative_pace_s": None,
+                "operational_fuel_average_l": None,
+                "representative_fuel_use_l": None,
+                "accepted_sample_counts": {"pace": 0, "fuel": 0},
+                "boundary_reason": pending_boundary.reason,
+                "boundary_event_id": pending_boundary.event_id,
+            }
+            current_laps = []
         active_regime = self.config.active_regime
         if active_regime is None:
             active_regime = _regime(_first(_mapping((current_snapshot or {}).get("environment")), "weather_regime", "regime"))
@@ -633,11 +673,12 @@ class StintCalculationEngine:
         if current_lap_number is not None and current_laps and _number(current_laps[0].get("lap_number")) is not None:
             current_stint_lap = int(current_lap_number - float(current_laps[0].get("lap_number")) + 1)
         else:
-            current_stint_lap = len(current_laps) + 1 if current_laps else None
+            current_stint_lap = len(current_laps) + 1 if current_laps else 0 if current_stint_id is not None else None
         progress = {
             "current_stint_id": current_stint_id,
             "stint_number": first_state.get("stint_number"),
             "current_stint_lap": current_stint_lap,
+            "current_stint_lap_zero_based": len(current_laps) if current_stint_id is not None else None,
             "completed_stint_laps": len(current_laps),
             "stint_start_time_s": start_time,
             "elapsed_stint_time_s": elapsed,
@@ -645,6 +686,7 @@ class StintCalculationEngine:
             "calculation_paused": _mapping((current_snapshot or {}).get("session")).get("paused") is True,
             "accepted_sample_counts": {"pace": len(pace_accepted), "fuel": len(fuel_accepted), "tyres": _tyre_summary(current_laps, current_snapshot, active_regime, self.config)["accepted_sample_count"], "projection": sum(1 for lap in current_laps if _eligibility(lap, "useForProjection")), "official_average": len(official_accepted)},
             "latest_completed_status": latest_completed_status,
+            "previous_stint": list(stints.values())[-2] if len(stints) >= 2 else None,
         }
         tyres = _tyre_summary(current_laps, current_snapshot, active_regime, self.config)
         boundary_event_ids = [str(event.get("event_id")) for event in event_list if _boundary_reason(event, self.config) is not None and event.get("event_id") is not None]
